@@ -1,0 +1,20 @@
+/target
+**/*.rs.bk
+.claude/
+
+# Legacy Python (removed in 0.3.0; kept here for reference if cherry-picking)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+scripts/_awp_impl.py
+scripts/_dump_typed.py
+
+# Local state
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
