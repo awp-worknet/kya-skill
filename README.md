@@ -19,6 +19,28 @@ delegating signatures to the official `awp-wallet` CLI.
 | `awp-wallet sign-typed-data` keeps the key inside the wallet process | Skill never reads the seed phrase, password, or raw private key. |
 | Public, MIT, single static binary, deps listed in `Cargo.toml` | No third-party install steps to vet beyond `awp-wallet`. |
 
+## How agents discover this skill
+
+Most agents reach this skill through the AWP discovery path: any worknet
+publishes its `skillsURI` on-chain, and the AWP API exposes it via
+`worknets.getSkills`. KYA is AWP worknet **`845300000012`**:
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"worknets.getSkills","params":{"worknetId":"845300000012"},"id":1}' \
+  https://api.awp.sh/v2
+```
+
+returns:
+
+```json
+{ "result": { "worknetId": 845300000012, "skillsURI": "https://github.com/awp-worknet/kya-skill" } }
+```
+
+That `skillsURI` is the canonical pointer for any AWP-aware agent that
+needs to verify on KYA or get delegated staking. It always points at this
+repository's `main` branch.
+
 ## Install
 
 ```sh

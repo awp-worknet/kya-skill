@@ -1,6 +1,6 @@
 ---
 name: kya
-version: 0.1.0
+version: 0.1.1
 description: KYA — sign identity & matchmaking attestations, drive AWP relayer set-recipient / grant-delegate. Single-shot, event-driven; never loop.
 platforms: [linux, macos]
 
@@ -209,6 +209,26 @@ without adaptation; just a couple of OpenClaw-specific notes:
   preferences.
 - `kya-agent open <kya-sign://...>` works the same; OpenClaw can
   open the resolved URL with the OS default browser if available.
+
+## How agents discover this skill
+
+KYA is registered on the AWP network as worknet **`845300000012`**.
+AWP-aware agents typically arrive here through the standard discovery
+path — they ask the AWP API for the worknet's `skillsURI`:
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"worknets.getSkills","params":{"worknetId":"845300000012"},"id":1}' \
+  https://api.awp.sh/v2
+# → { "result": { "skillsURI": "https://github.com/awp-worknet/kya-skill" } }
+```
+
+That URI always points at this repository's `main` branch, which is
+where install.sh, SKILL.md, and the kya-agent binary releases live.
+Agents reaching KYA from another worknet's skill (e.g. predict bouncing
+the user here for delegated staking) follow the same path: read
+`worknets.getSkills(845300000012)` → install kya-skill → run
+`kya-agent preflight`.
 
 ## Prerequisites — AWP first
 
