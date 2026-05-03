@@ -60,13 +60,8 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         active.push(att.clone());
         let t = att.get("type").and_then(|x| x.as_str()).unwrap_or("");
         *by_type.entry(t.to_string()).or_insert(0) += 1;
-        match t {
-            "twitter_claim" => {
-                if !active_kinds.contains(&"twitter") {
-                    active_kinds.push("twitter");
-                }
-            }
-            _ => {}
+        if t == "twitter_claim" && !active_kinds.contains(&"twitter") {
+            active_kinds.push("twitter");
         }
     }
 

@@ -8,6 +8,12 @@ pub const DEFAULT_KYA_WEB_BASE: &str = "https://kya.link";
 pub const DEFAULT_AWP_RELAY_BASE: &str = "https://api.awp.sh";
 pub const DEFAULT_BASE_RPC_URL: &str = "https://mainnet.base.org";
 
+/// KYA's own worknet id on Base mainnet. The binary no longer defaults
+/// `--worknet` to this — owner must select the target worknet explicitly
+/// via the magic link or the CLI flag — but the constant is kept as a
+/// stable reference for documentation, smoke-test scaffolding, and any
+/// downstream tooling that still asks "which worknet hosts KYA itself?".
+#[allow(dead_code)]
 pub const DEFAULT_KYA_WORKNET_ID: &str = "845300000012";
 
 /// Hard-coded — skill only signs typed-data targeting these contracts.
