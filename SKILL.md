@@ -341,12 +341,16 @@ pattern applies after the in-app verification completes.
 
 ### Step 3 — execute delegated staking
 
-**[STOP]** — confirm the amount. The worknet is fixed:
+**[STOP]** — confirm both the target WorkNet and the amount. The WorkNet
+must be explicit. If the owner came from KYA web, use the `worknet_id`
+embedded in the `kya-sign://set-recipient?...` magic link. If you do not
+have a WorkNet id, **stop and ask the owner to choose one in KYA web**;
+do not default to KYA's own WorkNet.
 
 ```
 About to request delegated staking:
   agent      0xabc...
-  worknet    845300000012   ← KYA's own subnet; ALWAYS this. Do not pass --worknet.
+  worknet    <worknet_id>   ← explicit target WorkNet selected by the owner
   amount     <N> AWP        ← owner picks; per-agent cap is 10 000 AWP
 
 This will:
@@ -356,24 +360,19 @@ This will:
 Proceed?
 ```
 
-KYA's delegated staking is always against KYA's own worknet
-(`845300000012`); the binary defaults `--worknet` accordingly. **Do not
-pass `--worknet` and do not ask the owner which worknet** — that's a
-category mistake. Other worknets bouncing the owner to KYA are asking
-for KYA-backed verification, not for KYA to stake into their pool.
-
 After confirmation:
 
 ```sh
-kya-agent set-recipient --amount <N>
+kya-agent set-recipient --worknet <worknet_id> --amount <N>
 ```
 
 For this full delegated-staking path, `kya-agent` intentionally fetches
 the KYA deposit address without `worknet_id`. The `--amount` value is
-carried only in Stage 2 (`delegated_staking_request`). Do not add
-`--worknet`: the legacy deposit-address `worknet_id` path means "enter
-awaiting_match" and can trigger the fixed admission-threshold allocation
-instead of the owner's requested amount.
+carried with `--worknet` only in Stage 2 (`delegated_staking_request`).
+The legacy deposit-address `worknet_id` path means "enter awaiting_match"
+and can trigger the fixed admission-threshold allocation instead of the
+owner's requested amount, so the binary deliberately omits worknet from
+the Stage 1 deposit-address lookup when `--amount` is present.
 
 The binary re-checks verification (defense-in-depth — the server gates
 on this too) and, if green, runs both stages and polls for terminal
@@ -425,7 +424,8 @@ kya-agent open "kya-sign://reveal?api=https://kya.link&type=email_claim"
 | `kya-sign://reveal?api=<base>` | `reveal` (all types) |
 | `kya-sign://reveal?api=<base>&type=<t>` | `reveal --type <t>` |
 | `kya-sign://set-recipient?api=<base>` | `set-recipient` (stage 1 only — point recipient at KYA deposit) |
-| `kya-sign://set-recipient?api=<base>&amount=<awp>` | `set-recipient --amount <awp>` (full delegated-staking; worknet defaults to 845300000012) |
+| `kya-sign://set-recipient?api=<base>&worknet_id=<id>&amount=<awp>` | `set-recipient --worknet <id> --amount <awp>` (full delegated-staking) |
+| `kya-sign://set-recipient?api=<base>&worknet=<id>&amount=<awp>` | same as above; legacy alias for `worknet_id` |
 | `kya-sign://grant-delegate` | `grant-delegate` |
 | `kya-sign://sign?clip=1` | `sign --from-clipboard` |
 
@@ -499,11 +499,11 @@ outcome.
 - **Per-agent cap is 10 000 AWP across delegated stakers.** Re-running
   `set-recipient --amount` won't bypass it; the cap is enforced server-side
   at match time.
-- **Don't pass `--worknet` with `set-recipient --amount`.** The binary
-  already defaults to KYA's own worknet for Stage 2. Passing worknet into
-  the deposit-address lookup is the old awaiting-match signal and can make
-  the system allocate the fixed 1,000 AWP threshold rather than the amount
-  the owner requested.
+- **`set-recipient --amount` requires `--worknet`.** The binary omits
+  worknet only from the Stage 1 deposit-address lookup; it still sends the
+  explicit WorkNet id in Stage 2 (`delegated_staking_request`). If the
+  magic link lacks `worknet_id`, stop and ask the owner to choose the
+  target WorkNet in KYA web.
 - **Telegram claim is public-channel only** (`t.me/<channel>/<msg_id>`).
   KYA fetches the public web preview; private DMs and unlisted groups
   cannot be verified.

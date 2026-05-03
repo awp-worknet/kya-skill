@@ -4,7 +4,6 @@ use super::{
 use crate::address::{validate_address, validate_signature};
 use crate::client;
 use crate::eip712::{awp_to_wei, build_set_recipient_typed_data, now_unix_seconds};
-use crate::env::DEFAULT_KYA_WORKNET_ID;
 use crate::error::{ErrorKind, KyaError, Result};
 use crate::{output, relay, rpc, wallet};
 use clap::Parser;
@@ -18,7 +17,7 @@ pub struct Args {
     /// Reward recipient. Default: KYA deposit address looked up from API.
     #[arg(long, default_value = "")]
     pub recipient: String,
-    #[arg(long, default_value = DEFAULT_KYA_WORKNET_ID)]
+    #[arg(long, default_value = "")]
     pub worknet: String,
     /// AWP decimal amount the owner wants matched. Triggers stage 2 when set.
     #[arg(long, default_value = "")]
@@ -42,10 +41,19 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     } else {
         Some(validate_amount(&args.amount)?)
     };
+    let stage2_worknet = if amount_awp_norm.is_some() {
+        Some(validate_worknet_id(&args.worknet)?)
+    } else {
+        None
+    };
     if amount_awp_norm.is_some() {
         output::step(
             "amount.resolved",
             json!({ "amount_awp": amount_awp_norm.as_deref() }),
+        );
+        output::step(
+            "worknet.resolved",
+            json!({ "worknet_id": stage2_worknet.as_deref() }),
         );
         // Eligibility precheck.
         let via = ensure_verified(&ctx.api_base, &agent)?;
@@ -161,7 +169,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             ctx,
             &agent,
             &amount_awp,
-            &args.worknet,
+            stage2_worknet.as_deref().unwrap_or(""),
         )?);
 
         if let Some(req_obj) = staking_request
@@ -288,6 +296,23 @@ fn validate_amount(raw: &str) -> Result<String> {
         return Err(KyaError::new(
             ErrorKind::InputRequired,
             format!("--amount must be > 0, got {raw:?}"),
+        ));
+    }
+    Ok(s.to_string())
+}
+
+fn validate_worknet_id(raw: &str) -> Result<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            "--worknet is required when --amount is set. Choose the target WorkNet in KYA web or pass --worknet <worknet_id>.",
+        ));
+    }
+    if !s.chars().all(|c| c.is_ascii_digit()) {
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            format!("--worknet must be a decimal WorkNet id, got {raw:?}"),
         ));
     }
     Ok(s.to_string())
@@ -428,17 +453,20 @@ mod tests {
 
     #[test]
     fn deposit_lookup_omits_worknet_for_owner_driven_amount_flow() {
-        assert_eq!(
-            deposit_lookup_worknet(Some("8000"), DEFAULT_KYA_WORKNET_ID),
-            "",
-        );
+        assert_eq!(deposit_lookup_worknet(Some("8000"), "845300000003"), "");
     }
 
     #[test]
     fn deposit_lookup_keeps_worknet_for_legacy_stage1_only_flow() {
         assert_eq!(
-            deposit_lookup_worknet(None, DEFAULT_KYA_WORKNET_ID),
-            DEFAULT_KYA_WORKNET_ID,
+            deposit_lookup_worknet(None, "845300000003"),
+            "845300000003",
         );
+    }
+
+    #[test]
+    fn amount_flow_requires_explicit_worknet() {
+        assert!(validate_worknet_id("").is_err());
+        assert!(validate_worknet_id("845300000003").is_ok());
     }
 }
