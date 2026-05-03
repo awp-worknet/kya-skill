@@ -273,33 +273,29 @@ kya-agent attestations
 
 Branches on `_internal.next_action`:
 
-- **`ready_for_delegated_staking`** (any active twitter_claim /
-  telegram_claim / email_claim / kyc) → **skip to Step 3.** Don't ask
-  the owner to verify again — they already did.
+- **`ready_for_delegated_staking`** (active `twitter_claim`) → **skip to
+  Step 3.** Don't ask the owner to verify again — they already did.
 - **`choose_verification`** (no active attestation) → continue to Step 2.
 
 ### Step 2 — owner picks a verification path
 
-The `attestations` response carries `_internal.options` — the four
-canonical methods. **[STOP]** — present them and let the owner choose.
-**Never pick for them.**
+The `attestations` response carries `_internal.options` — for delegated
+staking this is currently X/Twitter only. **[STOP]** — present it to the
+owner before continuing.
 
 ```
-You don't have any active KYA verification yet. Pick one:
+You don't have active X verification yet. Complete:
   A) Twitter (X) — public tweet
-  B) Telegram — public-channel post
-  C) Email — 6-digit code (no public post)
-  D) KYC — Didit selfie + ID (heavier, satisfies Human tier)
 
-A/B/C give the Social tier; D gives the Human tier. Either is enough
-for delegated staking.
+Telegram, Email, and KYC attestations may exist for other KYA surfaces,
+but they do not unlock delegated staking.
 ```
 
-After choice, run the matching command (the binary's `command` field).
-For Twitter / Telegram the binary returns a `handoff_url`:
+Run the matching command (the binary's `command` field). For Twitter the
+binary returns a `handoff_url`:
 
 ```sh
-kya-agent claim-twitter        # or claim-telegram
+kya-agent claim-twitter
 # stdout JSON contains EXACTLY:
 #   handoff_url:           "https://kya.link/verify/social/claim#agent=…&sig=…"
 #   instructions_for_agent: "Relay handoff_url verbatim … do NOT ask owner to publish/paste"
@@ -374,9 +370,9 @@ and can trigger the fixed admission-threshold allocation instead of the
 owner's requested amount, so the binary deliberately omits worknet from
 the Stage 1 deposit-address lookup when `--amount` is present.
 
-The binary re-checks verification (defense-in-depth — the server gates
-on this too) and, if green, runs both stages and polls for terminal
-status.
+The binary re-checks X/Twitter verification (defense-in-depth — the
+server gates on this too) and, if green, runs both stages and polls for
+terminal status.
 
 ### Step 4 — terminal status
 
@@ -446,7 +442,7 @@ dispatched command before it runs.
 | `claim-email` | Bind an email. Two signs sandwich a 6-digit code. TTY prompts; piped requires `--email --code`. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL, optionally poll until terminal. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. `--type email_claim/kyc/twitter_claim/telegram_claim/staking`. |
-| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. Pre-checks Social or Human attestation. |
+| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. Pre-checks X/Twitter attestation. |
 | `staking-status` | Re-check a delegated-staking request's status (use after `set-recipient` returns `staking_pending`). |
 | `grant-delegate` | Provider side: authorize `KyaAllocatorProxy` to allocate on your behalf, gasless via relayer. |
 | `sign` | Generic EIP-712 signer for ad-hoc KYA / AWPRegistry payloads. `--from-file` / `--from-clipboard` / stdin. |
@@ -469,7 +465,7 @@ streams progress on stderr as NDJSON `step` / `info` lines.
 | `EMAIL_CODE_INVALID` | Re-read the inbox and re-run `kya-agent claim-email --email <addr> --code <CODE>`. |
 | `EMAIL_MAX_ATTEMPTS` | 5 wrong codes — restart with a fresh `kya-agent claim-email`. |
 | `EMAIL_RESEND_COOLDOWN` | Wait ~60 s and retry. |
-| `NOT_VERIFIED` | `set-recipient --amount` requires Social or Human first. Run `kya-agent claim-twitter` or `kya-agent kyc`. |
+| `NOT_VERIFIED` | `set-recipient --amount` requires X/Twitter verification first. Run `kya-agent claim-twitter`. |
 | `PER_AGENT_CAP_EXCEEDED` | Agent already has ≥10 000 AWP delegated-staked. Cannot stack more. |
 | `NO_CAPACITY` | No provider capacity right now. Surface verbatim — do not retry in a tight loop. |
 | `STAKING_REQUEST_FAILED` | Read `failed_reason` and surface it verbatim. Do not retry blindly. |
@@ -488,11 +484,10 @@ outcome.
 - **Clock skew is the #1 cause of `INVALID_SIGNATURE`.** KYA accepts ±60 s
   future / 300 s past. If the user's clock is off, every sign attempt
   will fail until they resync — re-trying without a resync is futile.
-- **`set-recipient --amount` requires verification first.** The binary
-  pre-checks the agent has an active `twitter_claim` or `kyc` attestation
-  before signing stage 1, so the user sees a clean "go run claim-twitter
-  or kyc first" instead of burning a setRecipient tx that the matching
-  worker would then reject.
+- **`set-recipient --amount` requires X/Twitter verification first.** The
+  binary pre-checks the agent has an active `twitter_claim` attestation
+  before signing stage 1, so the user sees a clean "go run claim-twitter"
+  instead of burning a setRecipient tx that the server would then reject.
 - **`reveal` is off-chain.** It signs an `Action(attestation_reveal)` to
   authenticate the owner, but KYA writes nothing — only consumes the
   nonce and returns one unredacted response. Re-run for a fresh view.
