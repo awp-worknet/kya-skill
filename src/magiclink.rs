@@ -10,7 +10,8 @@
 //   kya-sign://kyc?api=<base>&owner=0x...
 //   kya-sign://reveal?api=<base>[&type=email_claim|kyc|...]
 //   kya-sign://sign?clip=1
-//   kya-sign://set-recipient?api=<base>&worknet=<id>[&amount=<awp>]
+//   kya-sign://set-recipient?api=<base>&worknet_id=<id>[&amount=<awp>]
+//   kya-sign://set-recipient?api=<base>&worknet=<id>[&amount=<awp>]  (legacy alias)
 //   kya-sign://set-recipient?recipient=0xdeposit...
 //   kya-sign://grant-delegate
 
@@ -151,7 +152,7 @@ pub fn dispatch_command(link: &ParsedLink) -> Result<Option<String>> {
             if let Some(r) = p.get("recipient") {
                 parts.push(format!("--recipient {}", shell_escape(r)));
             }
-            if let Some(w) = p.get("worknet") {
+            if let Some(w) = p.get("worknet_id").or_else(|| p.get("worknet")) {
                 parts.push(format!("--worknet {}", shell_escape(w)));
             }
             if let Some(a) = p.get("amount") {
@@ -222,5 +223,15 @@ mod tests {
     fn dispatch_unknown() {
         let l = parse("kya-sign://make-coffee").unwrap();
         assert!(dispatch_command(&l).unwrap().is_none());
+    }
+
+    #[test]
+    fn dispatch_set_recipient_accepts_worknet_id() {
+        let l = parse("kya-sign://set-recipient?worknet_id=845300000003&amount=1000")
+            .unwrap();
+        let cmd = dispatch_command(&l).unwrap().unwrap();
+        assert!(cmd.contains("set-recipient"));
+        assert!(cmd.contains("--worknet 845300000003"));
+        assert!(cmd.contains("--amount 1000"));
     }
 }

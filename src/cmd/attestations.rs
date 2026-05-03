@@ -47,9 +47,8 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         .cloned()
         .unwrap_or_default();
 
-    // Active = the only ones that count for delegated staking eligibility.
-    // KYA's matching worker enforces the same predicate server-side; we
-    // pre-compute it here so the calling agent doesn't have to.
+    // KYA delegated staking currently only accepts active X/Twitter verification.
+    // Other attestations still appear in the response, but they do not unlock this flow.
     let mut active: Vec<Value> = Vec::new();
     let mut active_kinds: Vec<&'static str> = Vec::new();
     let mut by_type: std::collections::BTreeMap<String, usize> = Default::default();
@@ -62,21 +61,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         let t = att.get("type").and_then(|x| x.as_str()).unwrap_or("");
         *by_type.entry(t.to_string()).or_insert(0) += 1;
         match t {
-            "twitter_claim" | "telegram_claim" | "email_claim" => {
-                if !active_kinds.contains(&"social") {
-                    active_kinds.push("social");
-                }
-            }
-            "kyc" => {
-                if !active_kinds.contains(&"human") {
-                    active_kinds.push("human");
+            "twitter_claim" => {
+                if !active_kinds.contains(&"twitter") {
+                    active_kinds.push("twitter");
                 }
             }
             _ => {}
         }
     }
 
-    let qualifies = active_kinds.contains(&"social") || active_kinds.contains(&"human");
+    let qualifies = active_kinds.contains(&"twitter");
 
     // next_action drives the calling agent's branch:
     // - qualifies → tell user they can proceed to delegated staking now
@@ -128,9 +122,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     Ok(())
 }
 
-/// Canonical verification options for the journey's "choose verification" step.
-/// SKILL.md / the calling agent surfaces these to the owner — never picks
-/// for them. Order is intentional: lighter to heavier.
+/// Canonical verification option for delegated staking eligibility.
 fn verification_options() -> Value {
     json!([
         {
@@ -138,24 +130,6 @@ fn verification_options() -> Value {
             "method": "twitter",
             "label": "Twitter (X) — public tweet",
             "command": "kya-agent claim-twitter"
-        },
-        {
-            "kind": "social",
-            "method": "telegram",
-            "label": "Telegram — public-channel post",
-            "command": "kya-agent claim-telegram"
-        },
-        {
-            "kind": "social",
-            "method": "email",
-            "label": "Email — 6-digit code",
-            "command": "kya-agent claim-email"
-        },
-        {
-            "kind": "human",
-            "method": "kyc",
-            "label": "KYC — Didit selfie + ID (heavier, satisfies Human tier)",
-            "command": "kya-agent kyc --owner <OWNER_ADDR>"
         }
     ])
 }

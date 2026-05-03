@@ -4,7 +4,6 @@ use super::{
 use crate::address::{validate_address, validate_signature};
 use crate::client;
 use crate::eip712::{awp_to_wei, build_set_recipient_typed_data, now_unix_seconds};
-use crate::env::DEFAULT_KYA_WORKNET_ID;
 use crate::error::{ErrorKind, KyaError, Result};
 use crate::{output, relay, rpc, wallet};
 use clap::Parser;
@@ -18,7 +17,7 @@ pub struct Args {
     /// Reward recipient. Default: KYA deposit address looked up from API.
     #[arg(long, default_value = "")]
     pub recipient: String,
-    #[arg(long, default_value = DEFAULT_KYA_WORKNET_ID)]
+    #[arg(long, default_value = "")]
     pub worknet: String,
     /// AWP decimal amount the owner wants matched. Triggers stage 2 when set.
     #[arg(long, default_value = "")]
@@ -42,12 +41,21 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     } else {
         Some(validate_amount(&args.amount)?)
     };
+    let stage2_worknet = if amount_awp_norm.is_some() {
+        Some(validate_worknet_id(&args.worknet)?)
+    } else {
+        None
+    };
     if amount_awp_norm.is_some() {
         output::step(
             "amount.resolved",
             json!({ "amount_awp": amount_awp_norm.as_deref() }),
         );
-        // Eligibility precheck.
+        output::step(
+            "worknet.resolved",
+            json!({ "worknet_id": stage2_worknet.as_deref() }),
+        );
+        // Eligibility precheck. KYA delegated staking currently only accepts X verification.
         let via = ensure_verified(&ctx.api_base, &agent)?;
         output::step("agent.verified", json!({ "via": via.join(",") }));
     }
@@ -161,7 +169,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             ctx,
             &agent,
             &amount_awp,
-            &args.worknet,
+            stage2_worknet.as_deref().unwrap_or(""),
         )?);
 
         if let Some(req_obj) = staking_request
@@ -293,6 +301,23 @@ fn validate_amount(raw: &str) -> Result<String> {
     Ok(s.to_string())
 }
 
+fn validate_worknet_id(raw: &str) -> Result<String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            "--worknet is required when --amount is set. Choose the target WorkNet in KYA web or pass --worknet <worknet_id>.",
+        ));
+    }
+    if !s.chars().all(|c| c.is_ascii_digit()) {
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            format!("--worknet must be a decimal WorkNet id, got {raw:?}"),
+        ));
+    }
+    Ok(s.to_string())
+}
+
 /// The old deposit-address `?worknet_id=` path is a legacy signal that puts
 /// the agent into `awaiting_match`; matching then allocates the worknet
 /// admissionThreshold (1,000 AWP on KYA self worknet) regardless of `--amount`.
@@ -321,36 +346,27 @@ fn ensure_verified(api_base: &str, agent: &str) -> Result<Vec<String>> {
         if att.get("status").and_then(|x| x.as_str()) != Some("active") {
             continue;
         }
-        // Twitter / Telegram / Email all qualify as Social. KYC qualifies
-        // as Human. The matching worker enforces "≥1 of either" — keep
-        // both kinds in `via` for the audit log even if redundant.
+        // Keep this aligned with KYA API: delegated staking requires active X verification.
         match att.get("type").and_then(|x| x.as_str()) {
-            Some("twitter_claim" | "telegram_claim" | "email_claim")
+            Some("twitter_claim")
                 if !via.iter().any(|s: &String| s == "social") =>
             {
-                via.push("social".to_string())
-            }
-            Some("kyc") if !via.iter().any(|s: &String| s == "human") => {
-                via.push("human".to_string())
+                via.push("twitter".to_string())
             }
             _ => {}
         }
     }
     if via.is_empty() {
         // Hand the calling agent a structured option list so it surfaces
-        // the four verification methods to the owner instead of picking
-        // one (which would be a paternalism failure — see SKILL.md rules).
+        // the exact verification path accepted by KYA delegated staking.
         let options = serde_json::json!([
-            {"kind":"social","method":"twitter","label":"Twitter (X) — public tweet","command":"kya-agent claim-twitter"},
-            {"kind":"social","method":"telegram","label":"Telegram — public-channel post","command":"kya-agent claim-telegram"},
-            {"kind":"social","method":"email","label":"Email — 6-digit code","command":"kya-agent claim-email"},
-            {"kind":"human","method":"kyc","label":"KYC — Didit selfie + ID","command":"kya-agent kyc --owner <OWNER_ADDR>"}
+            {"kind":"social","method":"twitter","label":"Twitter (X) — public tweet","command":"kya-agent claim-twitter"}
         ]);
         return Err(KyaError::new(
             ErrorKind::NotVerified,
-            "Agent must complete at least one verification before delegated staking.",
+            "Agent must complete X verification before delegated staking.",
         )
-        .with_hint("ask the owner to pick one of the four options; do not pick for them")
+        .with_hint("ask the owner to complete Twitter (X) verification; other attestations do not unlock delegated staking")
         .with_extras(serde_json::json!({
             "next_action": "choose_verification",
             "active_kinds": [],
@@ -428,17 +444,20 @@ mod tests {
 
     #[test]
     fn deposit_lookup_omits_worknet_for_owner_driven_amount_flow() {
-        assert_eq!(
-            deposit_lookup_worknet(Some("8000"), DEFAULT_KYA_WORKNET_ID),
-            "",
-        );
+        assert_eq!(deposit_lookup_worknet(Some("8000"), "845300000003"), "");
     }
 
     #[test]
     fn deposit_lookup_keeps_worknet_for_legacy_stage1_only_flow() {
         assert_eq!(
-            deposit_lookup_worknet(None, DEFAULT_KYA_WORKNET_ID),
-            DEFAULT_KYA_WORKNET_ID,
+            deposit_lookup_worknet(None, "845300000003"),
+            "845300000003",
         );
+    }
+
+    #[test]
+    fn amount_flow_requires_explicit_worknet() {
+        assert!(validate_worknet_id("").is_err());
+        assert!(validate_worknet_id("845300000003").is_ok());
     }
 }
