@@ -7,8 +7,8 @@
 
 use crate::address::validate_address;
 use crate::env::{
-    AWP_REGISTRY_ADDRESS, AWP_REGISTRY_DOMAIN_NAME, AWP_REGISTRY_DOMAIN_VERSION,
-    KYA_DOMAIN_NAME, KYA_DOMAIN_VERSION,
+    AWP_REGISTRY_ADDRESS, AWP_REGISTRY_DOMAIN_NAME, AWP_REGISTRY_DOMAIN_VERSION, KYA_DOMAIN_NAME,
+    KYA_DOMAIN_VERSION,
 };
 use crate::error::{ErrorKind, KyaError, Result};
 use rand::RngCore;
@@ -35,6 +35,10 @@ const KNOWN_ACTIONS: &[&str] = &[
     "telegram_claim",
     "email_prepare",
     "email_confirm",
+    "agent_email_onboard_prepare",
+    "agent_email_onboard_confirm",
+    "agent_email_inbox_otp_prepare",
+    "agent_email_inbox_otp_confirm",
     "delegated_staking_request",
     "attestation_reveal",
 ];

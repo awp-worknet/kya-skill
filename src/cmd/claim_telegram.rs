@@ -65,10 +65,13 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             ("agent", &agent),
             ("nonce", &claim_nonce),
             ("claim_text", &claim_text),
-            ("expires_at", prepared
-                .get("expires_at")
-                .and_then(|x| x.as_str())
-                .unwrap_or_default()),
+            (
+                "expires_at",
+                prepared
+                    .get("expires_at")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default(),
+            ),
             ("sig", &sig2),
             ("ts", &ts2_str),
             ("msg_nonce", &n2),
@@ -82,7 +85,11 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         "handoff_url": &url,
         "instructions_for_agent": "Relay handoff_url verbatim to the owner. Do NOT ask the owner to publish a Telegram message or paste any URL back. KYA web walks them through it. After they say done, run `kya-agent attestations`.",
     });
-    output::ok(body, "browser_handoff_then_verify", Some("kya-agent attestations"));
+    output::ok(
+        body,
+        "browser_handoff_then_verify",
+        Some("kya-agent attestations"),
+    );
     Ok(())
 }
 
@@ -91,7 +98,12 @@ fn build_handoff_url(web_base: &str, path: &str, params: &[(&str, &str)]) -> Str
         .iter()
         .map(|(k, v)| format!("{}={}", percent_encode(k), percent_encode(v)))
         .collect();
-    format!("{}{}#{}", web_base.trim_end_matches('/'), path, frag.join("&"))
+    format!(
+        "{}{}#{}",
+        web_base.trim_end_matches('/'),
+        path,
+        frag.join("&")
+    )
 }
 
 fn percent_encode(s: &str) -> String {

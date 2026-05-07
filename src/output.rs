@@ -30,7 +30,11 @@ fn emit_stderr(key: &str, value: &str, fields: Value) {
         }
     }
     // Ignore lock-poisoning; this runs before exit.
-    let _ = writeln!(std::io::stderr(), "{}", serde_json::to_string(&payload).unwrap_or_default());
+    let _ = writeln!(
+        std::io::stderr(),
+        "{}",
+        serde_json::to_string(&payload).unwrap_or_default()
+    );
     let _ = std::io::stderr().flush();
 }
 

@@ -1,6 +1,4 @@
-use super::{
-    poll_relay, poll_staking_request, resolve_agent, sign_action, signed, Ctx,
-};
+use super::{poll_relay, poll_staking_request, resolve_agent, sign_action, signed, Ctx};
 use crate::address::{validate_address, validate_signature};
 use crate::client;
 use crate::eip712::{awp_to_wei, build_set_recipient_typed_data, now_unix_seconds};
@@ -94,8 +92,8 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     // recipient was set on the first round, only stage 2 needs to run
     // again.
     let current_recipient = rpc::awp_get_recipient(&agent).unwrap_or_default();
-    let already_set = !current_recipient.is_empty()
-        && current_recipient.eq_ignore_ascii_case(&recipient);
+    let already_set =
+        !current_recipient.is_empty() && current_recipient.eq_ignore_ascii_case(&recipient);
 
     let (tx_hash, final_status, res) = if already_set {
         output::step(
@@ -111,13 +109,8 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     } else {
         let nonce = rpc::registry_nonce(&agent)?;
         let deadline = now_unix_seconds() + args.deadline_seconds.max(60);
-        let typed = build_set_recipient_typed_data(
-            &agent,
-            &recipient,
-            nonce,
-            deadline,
-            ctx.chain_id,
-        )?;
+        let typed =
+            build_set_recipient_typed_data(&agent, &recipient, nonce, deadline, ctx.chain_id)?;
         output::step(
             "eip712.built",
             json!({ "primary_type": typed["primaryType"], "deadline": deadline }),
@@ -177,10 +170,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             .and_then(|w| w.get("request"))
             .cloned()
         {
-            let request_id = req_obj
-                .get("id")
-                .and_then(|x| x.as_str())
-                .map(String::from);
+            let request_id = req_obj.get("id").and_then(|x| x.as_str()).map(String::from);
             output::step(
                 "kya.staking_request.queued",
                 json!({
@@ -323,10 +313,7 @@ fn validate_worknet_id(raw: &str) -> Result<String> {
 /// admissionThreshold (1,000 AWP on KYA self worknet) regardless of `--amount`.
 /// Owner-driven delegated staking carries worknet in Stage 2, so Stage 1 must
 /// fetch only the deposit address when `--amount` is present.
-fn deposit_lookup_worknet<'a>(
-    amount_awp_norm: Option<&str>,
-    worknet: &'a str,
-) -> &'a str {
+fn deposit_lookup_worknet<'a>(amount_awp_norm: Option<&str>, worknet: &'a str) -> &'a str {
     if amount_awp_norm.is_some() {
         ""
     } else {
@@ -348,9 +335,7 @@ fn ensure_verified(api_base: &str, agent: &str) -> Result<Vec<String>> {
         }
         // Keep this aligned with KYA API: delegated staking requires active X verification.
         match att.get("type").and_then(|x| x.as_str()) {
-            Some("twitter_claim")
-                if !via.iter().any(|s: &String| s == "social") =>
-            {
+            Some("twitter_claim") if !via.iter().any(|s: &String| s == "social") => {
                 via.push("twitter".to_string())
             }
             _ => {}
@@ -404,7 +389,10 @@ fn post_delegated_staking_request(
 
 fn fail_on_unsuccessful_terminal(req: &serde_json::Value) -> Result<()> {
     let status = req.get("status").and_then(|x| x.as_str()).unwrap_or("");
-    let failed_reason = req.get("failed_reason").and_then(|x| x.as_str()).unwrap_or("");
+    let failed_reason = req
+        .get("failed_reason")
+        .and_then(|x| x.as_str())
+        .unwrap_or("");
     let request_id = req.get("id").and_then(|x| x.as_str()).unwrap_or("");
     match status {
         "matched" => Ok(()),
@@ -449,10 +437,7 @@ mod tests {
 
     #[test]
     fn deposit_lookup_keeps_worknet_for_legacy_stage1_only_flow() {
-        assert_eq!(
-            deposit_lookup_worknet(None, "845300000003"),
-            "845300000003",
-        );
+        assert_eq!(deposit_lookup_worknet(None, "845300000003"), "845300000003",);
     }
 
     #[test]

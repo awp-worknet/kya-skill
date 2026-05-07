@@ -1,3 +1,15 @@
+// Agent-email "inbox-OTP" flow (right card).
+//
+// Upgrades an existing agent_email_claim from `signup_only` to
+// `inbox_control`, or creates one fresh for a user who already owns an
+// `*@agentmail.to` inbox out-of-band. KYA sends a 6-digit code to the inbox;
+// the agent (holding the agentmail API key) must read it and return it.
+//
+// Two signs sandwich the OTP:
+//   1. agent_email_inbox_otp_prepare — KYA generates code, delivers to inbox.
+//   2. agent_email_inbox_otp_confirm — agent posts the code back. KYA writes
+//      or upserts the attestation with proof_strength=inbox_control.
+
 use super::{poll_attestation, resolve_agent, sign_action, signed, stdin_is_tty, Ctx};
 use crate::client;
 use crate::error::{ErrorKind, KyaError, Result};
@@ -9,21 +21,22 @@ use serde_json::json;
 use std::io::{stdout, Write};
 use std::time::Duration;
 
-static EMAIL_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").expect("email regex"));
+static AGENTMAIL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[a-z0-9][a-z0-9\-]{1,30}[a-z0-9]@agentmail\.to$").expect("agentmail regex")
+});
 static CODE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9]{6}$").expect("code regex"));
 
 #[derive(Parser, Debug)]
 pub struct Args {
     #[arg(long, default_value = "")]
     pub agent: String,
-    /// Email address to bind. Required when stdin is not a TTY.
+    /// The `*@agentmail.to` inbox the agent controls. Required when piped.
     #[arg(long, default_value = "")]
-    pub email: String,
-    /// 6-digit code from the verification email. Required when stdin is not a TTY.
+    pub inbox_email: String,
+    /// 6-digit code KYA delivered to the inbox. Required when piped.
     #[arg(long, default_value = "")]
     pub code: String,
-    /// Skip the post-confirm poll.
+    /// Skip the post-confirm attestation poll.
     #[arg(long)]
     pub no_poll: bool,
     #[arg(long, default_value_t = 60)]
@@ -32,33 +45,43 @@ pub struct Args {
 
 pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     let agent = resolve_agent(ctx, &args.agent)?;
-    let email = resolve_email(&args)?;
+    let inbox_email = resolve_inbox_email(&args)?;
     output::info(
         "agent resolved",
-        json!({ "agent": &agent, "chain_id": ctx.chain_id, "email": &email }),
+        json!({
+            "agent": &agent,
+            "chain_id": ctx.chain_id,
+            "inbox_email": &inbox_email,
+        }),
     );
 
-    // Stage 1 — email_prepare.
-    let (sig1, ts1, n1) = sign_action(ctx, "email_prepare", &agent)?;
-    let prepared = client::prepare_email(&ctx.api_base, &agent, &email, signed(&sig1, ts1, &n1))?;
+    // Stage 1 — inbox-otp/prepare: KYA emails the code.
+    let (sig1, ts1, n1) = sign_action(ctx, "agent_email_inbox_otp_prepare", &agent)?;
+    let prepared = client::agent_email_inbox_otp_prepare(
+        &ctx.api_base,
+        &agent,
+        &inbox_email,
+        signed(&sig1, ts1, &n1),
+    )?;
     output::step(
         "prepare.ok",
         json!({
-            "email": prepared.get("email").cloned().unwrap_or(json!(&email)),
+            "inbox_email": &inbox_email,
             "expires_at": prepared.get("expires_at"),
             "resend_available_at": prepared.get("resend_available_at"),
         }),
     );
 
-    // Stage 2 — read code.
+    // Stage 2 — read code from the inbox. Agent is expected to use the
+    // agentmail SDK here; the CLI just accepts whatever was retrieved.
     let code = resolve_code(&args)?;
 
-    // Stage 3 — email_confirm.
-    let (sig2, ts2, n2) = sign_action(ctx, "email_confirm", &agent)?;
-    let confirmed = client::confirm_email(
+    // Stage 3 — inbox-otp/confirm: agent returns the code.
+    let (sig2, ts2, n2) = sign_action(ctx, "agent_email_inbox_otp_confirm", &agent)?;
+    let confirmed = client::agent_email_inbox_otp_confirm(
         &ctx.api_base,
         &agent,
-        &email,
+        &inbox_email,
         &code,
         signed(&sig2, ts2, &n2),
     )?;
@@ -70,13 +93,14 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     if attestation_id.is_empty() {
         return Err(KyaError::new(
             ErrorKind::KyaError,
-            format!("unexpected confirm response: {confirmed}"),
+            format!("unexpected inbox-otp/confirm response: {confirmed}"),
         ));
     }
     output::step(
         "confirm.ok",
         json!({
             "attestation_id": &attestation_id,
+            "proof_strength": "inbox_control",
             "status": confirmed.get("status"),
         }),
     );
@@ -86,7 +110,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             &ctx.api_base,
             &agent,
             &attestation_id,
-            "email_claim",
+            "agent_email_claim",
             Duration::from_secs(3),
             Duration::from_secs(args.poll_timeout),
         )?;
@@ -98,20 +122,14 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
                     .to_string(),
                 false,
             ),
-            None => {
-                output::info(
-                    "poll timed out — attestation should appear shortly",
-                    json!({ "attestation_id": &attestation_id }),
-                );
-                (
-                    confirmed
-                        .get("status")
-                        .and_then(|x| x.as_str())
-                        .unwrap_or("pending")
-                        .to_string(),
-                    true,
-                )
-            }
+            None => (
+                confirmed
+                    .get("status")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("pending")
+                    .to_string(),
+                true,
+            ),
         }
     } else {
         (
@@ -128,36 +146,37 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         "agent_address": &agent,
         "attestation_id": &attestation_id,
         "status": final_status,
-        "email": &email,
+        "proof_strength": "inbox_control",
+        "inbox_email": &inbox_email,
         "timed_out": timed_out,
     });
     output::ok(body, "ready", None);
     Ok(())
 }
 
-fn resolve_email(args: &Args) -> Result<String> {
-    let raw = args.email.trim().to_string();
+fn resolve_inbox_email(args: &Args) -> Result<String> {
+    let raw = args.inbox_email.trim().to_lowercase();
     let raw = if raw.is_empty() {
         if !stdin_is_tty() {
             return Err(KyaError::new(
                 ErrorKind::InputRequired,
-                "email required (pass --email <addr> in non-interactive mode)",
+                "inbox_email required (pass --inbox-email <addr>@agentmail.to)",
             ));
         }
-        let _ = write!(stdout(), "Email to bind: ");
+        let _ = write!(stdout(), "Your agentmail inbox (*@agentmail.to): ");
         let _ = stdout().flush();
         let mut buf = String::new();
         std::io::stdin()
             .read_line(&mut buf)
             .map_err(|e| KyaError::new(ErrorKind::Internal, format!("stdin: {e}")))?;
-        buf.trim().to_string()
+        buf.trim().to_lowercase()
     } else {
         raw
     };
-    if !EMAIL_RE.is_match(&raw) {
+    if !AGENTMAIL_RE.is_match(&raw) {
         return Err(KyaError::new(
             ErrorKind::EmailInvalid,
-            format!("invalid email format: {raw:?}"),
+            format!("inbox_email must be a valid *@agentmail.to address, got {raw:?}"),
         ));
     }
     Ok(raw)
@@ -173,12 +192,10 @@ fn resolve_code(args: &Args) -> Result<String> {
             ));
         }
         output::info(
-            "check your inbox (and spam) for a 6-digit code from KYA",
-            json!({
-                "note": "codes expire in ~10 minutes; 5 wrong attempts invalidate the code",
-            }),
+            "read the latest KYA OTP from your agentmail inbox (via agentmail SDK)",
+            json!({ "note": "codes expire in ~10 minutes; 5 wrong attempts invalidate the code" }),
         );
-        let _ = write!(stdout(), "Verification code (6 digits): ");
+        let _ = write!(stdout(), "Inbox OTP (6 digits): ");
         let _ = stdout().flush();
         let mut buf = String::new();
         std::io::stdin()

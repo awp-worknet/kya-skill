@@ -9,6 +9,8 @@ use crate::wallet;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
+pub mod agent_email_inbox_otp;
+pub mod agent_email_onboard;
 pub mod attestations;
 pub mod bootstrap;
 pub mod claim_email;
@@ -43,11 +45,7 @@ pub fn resolve_agent(ctx: &Ctx, override_addr: &str) -> Result<String> {
 }
 
 /// Sign one Action(...) payload — returns (signature, timestamp, nonce).
-pub fn sign_action(
-    ctx: &Ctx,
-    action: &str,
-    agent_address: &str,
-) -> Result<(String, u64, String)> {
+pub fn sign_action(ctx: &Ctx, action: &str, agent_address: &str) -> Result<(String, u64, String)> {
     let timestamp = now_unix_seconds();
     let nonce = new_signature_nonce();
     let typed = build_action_typed_data(action, agent_address, timestamp, &nonce, ctx.chain_id)?;
@@ -68,11 +66,7 @@ pub fn sign_action(
     Ok((signature, timestamp, nonce))
 }
 
-pub fn signed<'a>(
-    signature: &'a str,
-    timestamp: u64,
-    nonce: &'a str,
-) -> SignedHeaders<'a> {
+pub fn signed<'a>(signature: &'a str, timestamp: u64, nonce: &'a str) -> SignedHeaders<'a> {
     SignedHeaders {
         signature,
         timestamp,
@@ -115,7 +109,11 @@ pub fn poll_attestation(
     Ok(None)
 }
 
-pub fn poll_relay(tx_hash: &str, interval: Duration, timeout: Duration) -> Result<serde_json::Value> {
+pub fn poll_relay(
+    tx_hash: &str,
+    interval: Duration,
+    timeout: Duration,
+) -> Result<serde_json::Value> {
     let started = Instant::now();
     while started.elapsed() < timeout {
         let s = crate::relay::status(tx_hash)?;

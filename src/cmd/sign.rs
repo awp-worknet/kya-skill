@@ -43,7 +43,10 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         buf
     };
     let typed = parse_typed_data(&raw)?;
-    let domain = typed.get("domain").cloned().unwrap_or(serde_json::json!({}));
+    let domain = typed
+        .get("domain")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let primary = typed
         .get("primaryType")
         .and_then(|x| x.as_str())
@@ -57,13 +60,19 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             "chain_id": domain.get("chainId"),
         }),
     );
-    output::step("sign.request", serde_json::json!({ "primary_type": &primary }));
+    output::step(
+        "sign.request",
+        serde_json::json!({ "primary_type": &primary }),
+    );
 
     let signature = wallet::sign_typed_data(&typed, &ctx.token)?;
     validate_signature(&signature)?;
     if let Some(p) = &args.write_file {
         std::fs::write(p, signature.as_bytes())?;
-        output::info("signature written", serde_json::json!({ "path": p.display().to_string() }));
+        output::info(
+            "signature written",
+            serde_json::json!({ "path": p.display().to_string() }),
+        );
     }
     println!("{signature}");
     Ok(())
@@ -72,10 +81,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
 fn parse_typed_data(raw: &str) -> Result<Value> {
     let raw = raw.trim();
     if raw.is_empty() {
-        return Err(KyaError::new(ErrorKind::InputRequired, "empty typed-data input"));
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            "empty typed-data input",
+        ));
     }
     let v: Value = serde_json::from_str(raw).map_err(|e| {
-        KyaError::new(ErrorKind::InputRequired, format!("typed-data not valid JSON: {e}"))
+        KyaError::new(
+            ErrorKind::InputRequired,
+            format!("typed-data not valid JSON: {e}"),
+        )
     })?;
     if !v.is_object() {
         return Err(KyaError::new(

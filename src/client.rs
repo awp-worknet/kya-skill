@@ -79,17 +79,18 @@ fn http_request(
     body: Option<&Value>,
     action: &str,
 ) -> Result<Value> {
-    let mut req = HTTP
-        .request(method, url)
-        .header(ACCEPT, "application/json");
+    let mut req = HTTP.request(method, url).header(ACCEPT, "application/json");
     if let Some(b) = body {
-        req = req.header(CONTENT_TYPE, "application/json").body(
-            serde_json::to_vec(b).map_err(KyaError::from)?,
-        );
+        req = req
+            .header(CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(b).map_err(KyaError::from)?);
     }
     req = signed(req, headers);
     let resp = req.send().map_err(|e| {
-        KyaError::new(ErrorKind::KyaUnreachable, format!("KYA API unreachable ({url}): {e}"))
+        KyaError::new(
+            ErrorKind::KyaUnreachable,
+            format!("KYA API unreachable ({url}): {e}"),
+        )
     });
     let (status, payload) = read_response(resp, action)?;
     check(status, payload, action)
@@ -165,6 +166,86 @@ pub fn confirm_email(
     )
 }
 
+pub fn agent_email_onboard_prepare(
+    api_base: &str,
+    agent_address: &str,
+    human_email: &str,
+    username: &str,
+    headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/attestations/agent-email/onboard/prepare"),
+        Some(headers),
+        Some(&json!({
+            "agent_address": agent_address,
+            "human_email": human_email,
+            "username": username,
+        })),
+        "agent_email_onboard_prepare",
+    )
+}
+
+pub fn agent_email_onboard_confirm(
+    api_base: &str,
+    agent_address: &str,
+    inbox_email: &str,
+    api_key: &str,
+    otp_code: &str,
+    headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/attestations/agent-email/onboard/confirm"),
+        Some(headers),
+        Some(&json!({
+            "agent_address": agent_address,
+            "inbox_email": inbox_email,
+            "api_key": api_key,
+            "otp_code": otp_code,
+        })),
+        "agent_email_onboard_confirm",
+    )
+}
+
+pub fn agent_email_inbox_otp_prepare(
+    api_base: &str,
+    agent_address: &str,
+    inbox_email: &str,
+    headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/attestations/agent-email/inbox-otp/prepare"),
+        Some(headers),
+        Some(&json!({
+            "agent_address": agent_address,
+            "inbox_email": inbox_email,
+        })),
+        "agent_email_inbox_otp_prepare",
+    )
+}
+
+pub fn agent_email_inbox_otp_confirm(
+    api_base: &str,
+    agent_address: &str,
+    inbox_email: &str,
+    code: &str,
+    headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/attestations/agent-email/inbox-otp/confirm"),
+        Some(headers),
+        Some(&json!({
+            "agent_address": agent_address,
+            "inbox_email": inbox_email,
+            "code": code,
+        })),
+        "agent_email_inbox_otp_confirm",
+    )
+}
+
 pub fn list_attestations(
     api_base: &str,
     agent_address: &str,
@@ -223,9 +304,7 @@ pub fn request_delegated_staking(
     worknet_id: &str,
     headers: SignedHeaders<'_>,
 ) -> Result<Value> {
-    if amount_wei.is_empty()
-        || amount_wei == "0"
-        || !amount_wei.chars().all(|c| c.is_ascii_digit())
+    if amount_wei.is_empty() || amount_wei == "0" || !amount_wei.chars().all(|c| c.is_ascii_digit())
     {
         return Err(KyaError::new(
             ErrorKind::InputRequired,
@@ -248,9 +327,7 @@ pub fn request_delegated_staking(
 pub fn list_staking_requests(api_base: &str, agent_address: &str) -> Result<Vec<Value>> {
     let v = http_request(
         Method::GET,
-        &format!(
-            "{api_base}/v1/services/staking/requests?agent_address={agent_address}"
-        ),
+        &format!("{api_base}/v1/services/staking/requests?agent_address={agent_address}"),
         None,
         None,
         "list_staking_requests",

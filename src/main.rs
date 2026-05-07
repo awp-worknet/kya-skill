@@ -62,6 +62,10 @@ enum Command {
     ClaimTelegram(cmd::claim_telegram::Args),
     /// Email claim — bind a real inbox to the agent EOA.
     ClaimEmail(cmd::claim_email::Args),
+    /// Agent-email onboard (left card) — KYA proxies agentmail signUp + verify. Writes agent_email_claim with proof_strength=signup_only.
+    AgentEmailOnboard(cmd::agent_email_onboard::Args),
+    /// Agent-email inbox-OTP (right card) — prove inbox control. Upgrades or creates agent_email_claim with proof_strength=inbox_control.
+    AgentEmailInboxOtp(cmd::agent_email_inbox_otp::Args),
     /// KYC — sign KycInit, create Didit session, poll terminal status.
     Kyc(cmd::kyc::Args),
     /// Reveal unredacted attestation metadata (off-chain only).
@@ -97,6 +101,8 @@ fn main() {
         Command::ClaimTwitter(a) => cmd::claim_twitter::run(&ctx, a),
         Command::ClaimTelegram(a) => cmd::claim_telegram::run(&ctx, a),
         Command::ClaimEmail(a) => cmd::claim_email::run(&ctx, a),
+        Command::AgentEmailOnboard(a) => cmd::agent_email_onboard::run(&ctx, a),
+        Command::AgentEmailInboxOtp(a) => cmd::agent_email_inbox_otp::run(&ctx, a),
         Command::Kyc(a) => cmd::kyc::run(&ctx, a),
         Command::Reveal(a) => cmd::reveal::run(&ctx, a),
         Command::Attestations(a) => cmd::attestations::run(&ctx, a),

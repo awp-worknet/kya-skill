@@ -40,7 +40,10 @@ fn post_relay(path: &str, body: &Value) -> Result<Value> {
         .unwrap_or_else(|| text.clone());
     Err(KyaError::new(
         ErrorKind::RelayUnreachable,
-        format!("AWP relay {path} failed (status={}): {err_msg}", status.as_u16()),
+        format!(
+            "AWP relay {path} failed (status={}): {err_msg}",
+            status.as_u16()
+        ),
     ))
 }
 
