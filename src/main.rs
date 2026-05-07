@@ -6,6 +6,7 @@
 use clap::{Parser, Subcommand};
 
 mod address;
+mod agentmail;
 mod client;
 mod cmd;
 mod eip712;

@@ -93,6 +93,18 @@ metadata:
       - name: AWP_WALLET_TOKEN
         required: false
         description: awp-wallet session token; only legacy awp-wallet (<v0.17) needs this
+      - name: AGENTMAIL_API_KEY
+        required: false
+        description: AgentMail inbox key; used by agent-email-inbox-otp to auto-read KYA OTPs
+      - name: AGENTMAIL_INBOX_ID
+        required: false
+        description: AgentMail inbox_id; optional when the key can list inboxes
+      - name: AGENTMAIL_API_BASE
+        required: false
+        description: AgentMail API base URL (default https://api.agentmail.to)
+      - name: KYA_AGENTMAIL_KEY_DIR
+        required: false
+        description: Local directory where agent-email-onboard saves AgentMail key JSON files
     emoji: "🪪"
     homepage: https://github.com/awp-worknet/kya-skill
     # `kind: download` is the OpenClaw-supported install kind; it pulls
@@ -448,8 +460,8 @@ dispatched command before it runs.
 | `claim-twitter` | Sign locally, emit a `kya.link/verify/social/claim#…` handoff URL. **Web-driven only** — owner opens the URL, KYA web takes care of the tweet + claim POST. Agent must NOT ask the owner to paste the tweet URL back. |
 | `claim-telegram` | Same shape as `claim-twitter`, public-channel only. |
 | `claim-email` | Bind an email. Two signs sandwich a 6-digit code. TTY prompts; piped requires `--email --code`. |
-| `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped can either pass `--human-email --username --code` or use `--prepare-only` followed by `--state <file> --code <OTP>`. |
-| `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. TTY prompts; piped requires `--inbox-email --code`. |
+| `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped can either pass `--human-email --username --code` or use `--prepare-only` followed by `--state <file> --code <OTP>`. After confirm, the AgentMail inbox key is saved locally and the output strongly warns the owner to keep that file for future `inbox_control` upgrades. |
+| `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. It first tries to auto-read the OTP with a saved key file or `AGENTMAIL_API_KEY`; `--code` remains the manual fallback. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL, optionally poll until terminal. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. `--type email_claim/kyc/twitter_claim/telegram_claim/staking`. |
 | `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. Pre-checks X/Twitter attestation. |
@@ -508,6 +520,16 @@ outcome.
 - **Per-agent cap is 10 000 AWP across delegated stakers.** Re-running
   `set-recipient --amount` won't bypass it; the cap is enforced server-side
   at match time.
+- **Do not lose the AgentMail inbox key.** `agent-email-onboard` creates a
+  local key file after confirm (override directory with
+  `KYA_AGENTMAIL_KEY_DIR`). Do not print, paste, or commit the key. Without
+  that key, the agent cannot read future OTPs sent to its `*@agentmail.to`
+  inbox and cannot automate `agent-email-inbox-otp`.
+- **AgentMail auto-read is local-only.** `agent-email-inbox-otp` calls
+  AgentMail's HTTP API directly (`/v0/inboxes/{inbox_id}/messages`) using
+  the saved key file, `--key-file`, or `AGENTMAIL_API_KEY` plus optional
+  `AGENTMAIL_INBOX_ID`. If no credentials are available it stops in
+  non-interactive mode and asks for `--code`.
 - **`set-recipient --amount` requires `--worknet`.** The binary omits
   worknet only from the Stage 1 deposit-address lookup; it still sends the
   explicit WorkNet id in Stage 2 (`delegated_staking_request`). If the
