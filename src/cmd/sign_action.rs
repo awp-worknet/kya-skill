@@ -66,7 +66,10 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     if !(8..=128).contains(&n.len()) || !n.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(KyaError::new(
             ErrorKind::InputRequired,
-            format!("--nonce must be hex (8-128 chars); got length={}: {n:?}", n.len()),
+            format!(
+                "--nonce must be hex (8-128 chars); got length={}: {n:?}",
+                n.len()
+            ),
         ));
     }
     let agent = validate_address(&args.agent, "agent")?;
@@ -108,7 +111,10 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
 
     if let Some(p) = &args.write_file {
         std::fs::write(p, signature.as_bytes())?;
-        output::info("signature written", json!({ "path": p.display().to_string() }));
+        output::info(
+            "signature written",
+            json!({ "path": p.display().to_string() }),
+        );
     }
     println!("{signature}");
     Ok(())

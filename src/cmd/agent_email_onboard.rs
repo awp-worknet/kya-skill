@@ -20,8 +20,11 @@ use crate::output;
 use clap::Parser;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::fs;
 use std::io::{stdout, Write};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 static EMAIL_RE: Lazy<Regex> =
@@ -43,6 +46,12 @@ pub struct Args {
     /// 6-digit OTP that agentmail delivered to --human-email. Required when piped.
     #[arg(long, default_value = "")]
     pub code: String,
+    /// Stop after prepare and write a local state file for a later confirm.
+    #[arg(long)]
+    pub prepare_only: bool,
+    /// Resume a prepared onboard flow from a local state file and confirm with --code.
+    #[arg(long, default_value = "")]
+    pub state: String,
     /// Skip the post-confirm attestation poll.
     #[arg(long)]
     pub no_poll: bool,
@@ -50,7 +59,23 @@ pub struct Args {
     pub poll_timeout: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct OnboardState {
+    agent_address: String,
+    human_email: String,
+    username: String,
+    inbox_email: String,
+    api_key: String,
+    api_base: String,
+    chain_id: u64,
+    prepared_at: u64,
+}
+
 pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
+    if !args.state.trim().is_empty() {
+        return run_confirm_from_state(ctx, &args);
+    }
+
     let agent = resolve_agent(ctx, &args.agent)?;
     let human_email = resolve_human_email(&args)?;
     let username = resolve_username(&args)?;
@@ -97,6 +122,36 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             "otp_channel": "human_email",
         }),
     );
+
+    if args.prepare_only {
+        let state = OnboardState {
+            agent_address: agent.clone(),
+            human_email: human_email.clone(),
+            username: username.clone(),
+            inbox_email: inbox_email.clone(),
+            api_key,
+            api_base: ctx.api_base.clone(),
+            chain_id: ctx.chain_id,
+            prepared_at: crate::eip712::now_unix_seconds(),
+        };
+        let path = write_state_file(&state)?;
+        let next_command = format!(
+            "kya-agent agent-email-onboard --state {} --code <6-digit-otp>",
+            shell_quote(&path),
+        );
+        output::ok(
+            json!({
+                "agent_address": &agent,
+                "human_email": &human_email,
+                "inbox_email": &inbox_email,
+                "state_path": path.to_string_lossy(),
+                "note": "OTP sent to the human email. The local state file contains a short-lived AgentMail api_key and will be deleted after confirm.",
+            }),
+            "wait_for_otp",
+            Some(&next_command),
+        );
+        return Ok(());
+    }
 
     // Stage 2 — read OTP from human_email.
     let code = resolve_code(&args)?;
@@ -179,6 +234,167 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     });
     output::ok(body, "ready", None);
     Ok(())
+}
+
+fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
+    let path = PathBuf::from(args.state.trim());
+    let state = read_state_file(&path)?;
+    if ctx.chain_id != state.chain_id {
+        return Err(KyaError::new(
+            ErrorKind::InputRequired,
+            format!(
+                "state was prepared for chain_id {}, but current --chain-id is {}",
+                state.chain_id, ctx.chain_id
+            ),
+        ));
+    }
+    let code = resolve_code(args)?;
+    output::info(
+        "resuming prepared agent-email onboard flow",
+        json!({
+            "agent": &state.agent_address,
+            "inbox_email": &state.inbox_email,
+            "prepared_at": state.prepared_at,
+        }),
+    );
+
+    let (sig, ts, nonce) = sign_action(ctx, "agent_email_onboard_confirm", &state.agent_address)?;
+    let confirmed = client::agent_email_onboard_confirm(
+        &state.api_base,
+        &state.agent_address,
+        &state.inbox_email,
+        &state.api_key,
+        &code,
+        signed(&sig, ts, &nonce),
+    )?;
+    let attestation_id = confirmed
+        .get("attestation_id")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    if attestation_id.is_empty() {
+        return Err(KyaError::new(
+            ErrorKind::KyaError,
+            format!("unexpected onboard/confirm response: {confirmed}"),
+        ));
+    }
+    let _ = fs::remove_file(&path);
+    output::step(
+        "confirm.ok",
+        json!({
+            "attestation_id": &attestation_id,
+            "proof_strength": "signup_only",
+            "status": confirmed.get("status"),
+            "state_deleted": true,
+        }),
+    );
+
+    let (final_status, timed_out) = if !args.no_poll {
+        let final_att = poll_attestation(
+            &state.api_base,
+            &state.agent_address,
+            &attestation_id,
+            "agent_email_claim",
+            Duration::from_secs(3),
+            Duration::from_secs(args.poll_timeout),
+        )?;
+        match final_att {
+            Some(att) => (
+                att.get("status")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("pending")
+                    .to_string(),
+                false,
+            ),
+            None => (
+                confirmed
+                    .get("status")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("pending")
+                    .to_string(),
+                true,
+            ),
+        }
+    } else {
+        (
+            confirmed
+                .get("status")
+                .and_then(|x| x.as_str())
+                .unwrap_or("pending")
+                .to_string(),
+            false,
+        )
+    };
+
+    output::ok(
+        json!({
+            "agent_address": &state.agent_address,
+            "attestation_id": &attestation_id,
+            "status": final_status,
+            "proof_strength": "signup_only",
+            "inbox_email": &state.inbox_email,
+            "upgrade_hint": "run `kya-agent agent-email-inbox-otp` after wiring an AgentMail API key to your agent",
+            "timed_out": timed_out,
+        }),
+        "ready",
+        None,
+    );
+    Ok(())
+}
+
+fn write_state_file(state: &OnboardState) -> Result<PathBuf> {
+    let mut dir = std::env::temp_dir();
+    dir.push("kya-agent");
+    fs::create_dir_all(&dir)?;
+    let filename = format!(
+        "agent-email-onboard-{}-{}-{}.json",
+        state.agent_address.to_lowercase(),
+        state.username,
+        state.prepared_at
+    );
+    let path = dir.join(filename);
+    let bytes = serde_json::to_vec_pretty(state)?;
+    write_secret_file(&path, &bytes)?;
+    Ok(path)
+}
+
+#[cfg(unix)]
+fn write_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn write_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+fn read_state_file(path: &Path) -> Result<OnboardState> {
+    let raw = fs::read(path)?;
+    serde_json::from_slice(&raw).map_err(KyaError::from)
+}
+
+fn shell_quote(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if raw
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/._:-".contains(c))
+    {
+        raw.to_string()
+    } else {
+        format!("'{}'", raw.replace('\'', "'\\''"))
+    }
 }
 
 fn resolve_human_email(args: &Args) -> Result<String> {

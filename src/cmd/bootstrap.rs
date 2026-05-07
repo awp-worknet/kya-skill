@@ -12,5 +12,11 @@ pub fn run(ctx: &Ctx, _args: Args) -> Result<()> {
         "bootstrap is a thin alias for preflight + onboarding hint",
         json!({}),
     );
-    preflight::run(ctx, preflight::Args { skip_relay: false, skip_rpc: false })
+    preflight::run(
+        ctx,
+        preflight::Args {
+            skip_relay: false,
+            skip_rpc: false,
+        },
+    )
 }

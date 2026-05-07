@@ -31,9 +31,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         all
     } else {
         all.into_iter()
-            .filter(|r| {
-                r.get("id").and_then(|x| x.as_str()) == Some(args.request_id.as_str())
-            })
+            .filter(|r| r.get("id").and_then(|x| x.as_str()) == Some(args.request_id.as_str()))
             .collect()
     };
 

@@ -31,9 +31,7 @@ fn awp_wallet_bin() -> Result<String> {
         ErrorKind::WalletNotConfigured,
         "awp-wallet CLI not found in PATH",
     )
-    .with_hint(
-        "Install awp-wallet from https://github.com/awp-core/awp-wallet, then re-run.",
-    ))
+    .with_hint("Install awp-wallet from https://github.com/awp-core/awp-wallet, then re-run."))
 }
 
 fn which(name: &str) -> Option<String> {
@@ -110,8 +108,7 @@ pub fn unlock(scope: &str, duration_sec: u64) -> Result<String> {
         json!({ "scope": scope, "duration_sec": duration_sec }),
     );
     let dur = duration_sec.to_string();
-    let (code, stdout, stderr) =
-        raw_exec(&["unlock", "--scope", scope, "--duration", &dur])?;
+    let (code, stdout, stderr) = raw_exec(&["unlock", "--scope", scope, "--duration", &dur])?;
     if code != 0 {
         let msg = if !stderr.is_empty() { stderr } else { stdout };
         return Err(KyaError::new(
@@ -131,11 +128,7 @@ pub fn unlock(scope: &str, duration_sec: u64) -> Result<String> {
     Ok(token)
 }
 
-fn call_with_autounlock(
-    args: &[&str],
-    token: &str,
-    purpose: &str,
-) -> Result<String> {
+fn call_with_autounlock(args: &[&str], token: &str, purpose: &str) -> Result<String> {
     let env_token = std::env::var("AWP_WALLET_TOKEN").unwrap_or_default();
     let attempt = if !token.is_empty() { token } else { &env_token };
     let mut first = args.to_vec();
@@ -165,7 +158,11 @@ fn call_with_autounlock(
     second.push(&fresh);
     let (code2, stdout2, stderr2) = raw_exec(&second)?;
     if code2 != 0 {
-        let msg = if !stderr2.is_empty() { stderr2 } else { stdout2 };
+        let msg = if !stderr2.is_empty() {
+            stderr2
+        } else {
+            stdout2
+        };
         return Err(KyaError::new(
             ErrorKind::WalletLocked,
             format!(

@@ -141,7 +141,12 @@ fn build_handoff_url(web_base: &str, path: &str, params: &[(&str, &str)]) -> Str
         .iter()
         .map(|(k, v)| format!("{}={}", percent_encode(k), percent_encode(v)))
         .collect();
-    format!("{}{}#{}", web_base.trim_end_matches('/'), path, frag.join("&"))
+    format!(
+        "{}{}#{}",
+        web_base.trim_end_matches('/'),
+        path,
+        frag.join("&")
+    )
 }
 
 fn percent_encode(s: &str) -> String {

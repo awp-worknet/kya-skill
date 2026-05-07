@@ -32,13 +32,8 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
 
     let nonce = rpc::registry_nonce(&provider)?;
     let deadline = now_unix_seconds() + args.deadline_seconds.max(60);
-    let typed = build_grant_delegate_typed_data(
-        &provider,
-        &delegate,
-        nonce,
-        deadline,
-        ctx.chain_id,
-    )?;
+    let typed =
+        build_grant_delegate_typed_data(&provider, &delegate, nonce, deadline, ctx.chain_id)?;
     output::step(
         "eip712.built",
         json!({ "primary_type": typed["primaryType"], "deadline": deadline }),

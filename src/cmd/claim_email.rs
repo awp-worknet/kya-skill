@@ -1,6 +1,4 @@
-use super::{
-    poll_attestation, resolve_agent, sign_action, signed, stdin_is_tty, Ctx,
-};
+use super::{poll_attestation, resolve_agent, sign_action, signed, stdin_is_tty, Ctx};
 use crate::client;
 use crate::error::{ErrorKind, KyaError, Result};
 use crate::output;

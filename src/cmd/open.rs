@@ -117,7 +117,10 @@ mod tests {
 
     #[test]
     fn split_basic() {
-        assert_eq!(shell_words("kya-agent claim-twitter"), vec!["kya-agent", "claim-twitter"]);
+        assert_eq!(
+            shell_words("kya-agent claim-twitter"),
+            vec!["kya-agent", "claim-twitter"]
+        );
     }
 
     #[test]

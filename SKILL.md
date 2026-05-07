@@ -421,7 +421,7 @@ kya-agent open "kya-sign://reveal?api=https://kya.link&type=email_claim"
 | `kya-sign://email-claim?api=<base>` | `claim-email` (prompts for email + code) |
 | `kya-sign://email-claim?api=<base>&email=<addr>` | `claim-email --email <addr>` |
 | `kya-sign://agent-email-onboard?api=<base>` | `agent-email-onboard` (prompts for human-email + username + OTP). Writes `agent_email_claim` with `proof_strength=signup_only`. |
-| `kya-sign://agent-email-onboard?api=<base>&human_email=<addr>&username=<name>` | `agent-email-onboard --human-email <addr> --username <name>` |
+| `kya-sign://agent-email-onboard?api=<base>&human_email=<addr>&username=<name>` | TTY: `agent-email-onboard --human-email <addr> --username <name>`. Non-TTY: `agent-email-onboard --human-email <addr> --username <name> --prepare-only`, then run the returned `_internal.next_command` with the OTP. |
 | `kya-sign://agent-email-inbox-otp?api=<base>` | `agent-email-inbox-otp` (prompts for inbox + code). Upserts `agent_email_claim` to `proof_strength=inbox_control`. |
 | `kya-sign://agent-email-inbox-otp?api=<base>&inbox=<addr>@agentmail.to` | `agent-email-inbox-otp --inbox-email <addr>` (`inbox_email` is also accepted) |
 | `kya-sign://kyc?api=<base>&owner=0x...` | `kyc --owner 0x...` |
@@ -448,7 +448,7 @@ dispatched command before it runs.
 | `claim-twitter` | Sign locally, emit a `kya.link/verify/social/claim#…` handoff URL. **Web-driven only** — owner opens the URL, KYA web takes care of the tweet + claim POST. Agent must NOT ask the owner to paste the tweet URL back. |
 | `claim-telegram` | Same shape as `claim-twitter`, public-channel only. |
 | `claim-email` | Bind an email. Two signs sandwich a 6-digit code. TTY prompts; piped requires `--email --code`. |
-| `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped requires `--human-email --username --code`. |
+| `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped can either pass `--human-email --username --code` or use `--prepare-only` followed by `--state <file> --code <OTP>`. |
 | `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. TTY prompts; piped requires `--inbox-email --code`. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL, optionally poll until terminal. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. `--type email_claim/kyc/twitter_claim/telegram_claim/staking`. |

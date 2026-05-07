@@ -62,7 +62,9 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     // 3. KYA reachable
     output::step("preflight.kya", json!({ "api_base": &ctx.api_base }));
     match client::ping(&ctx.api_base) {
-        Ok(_) => checks.push(json!({ "name": "kya-api", "ok": true, "detail": ctx.api_base.clone() })),
+        Ok(_) => {
+            checks.push(json!({ "name": "kya-api", "ok": true, "detail": ctx.api_base.clone() }))
+        }
         Err(e) => {
             checks.push(json!({ "name": "kya-api", "ok": false, "detail": e.to_string() }));
             ready = false;
@@ -76,7 +78,9 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     if !args.skip_relay {
         match relay::ping() {
             Ok(_) => checks.push(json!({ "name": "awp-relay", "ok": true })),
-            Err(e) => checks.push(json!({ "name": "awp-relay", "ok": false, "detail": e.to_string() })),
+            Err(e) => {
+                checks.push(json!({ "name": "awp-relay", "ok": false, "detail": e.to_string() }))
+            }
         }
     }
 
@@ -84,7 +88,9 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     if !args.skip_rpc {
         match rpc::ping() {
             Ok(_) => checks.push(json!({ "name": "base-rpc", "ok": true })),
-            Err(e) => checks.push(json!({ "name": "base-rpc", "ok": false, "detail": e.to_string() })),
+            Err(e) => {
+                checks.push(json!({ "name": "base-rpc", "ok": false, "detail": e.to_string() }))
+            }
         }
     }
 
@@ -151,10 +157,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         // When everything is green, hint at the most common next move so the
         // calling agent doesn't have to guess. Other intents (verify, reveal,
         // grant-delegate) override this in conversation context.
-        extras_map.insert(
-            "suggested_journey".to_string(),
-            json!("delegated_staking"),
-        );
+        extras_map.insert("suggested_journey".to_string(), json!("delegated_staking"));
         extras_map.insert(
             "next_command_hint".to_string(),
             json!("kya-agent attestations"),

@@ -22,9 +22,7 @@ pub fn validate_address(value: &str, name: &str) -> Result<String> {
     if !ADDR_RE.is_match(value) {
         return Err(KyaError::new(
             ErrorKind::InputRequired,
-            format!(
-                "{name} must look like 0x followed by 40 hex chars (got: {value:?})"
-            ),
+            format!("{name} must look like 0x followed by 40 hex chars (got: {value:?})"),
         ));
     }
     Ok(value.to_lowercase())
@@ -81,8 +79,7 @@ mod tests {
 
     #[test]
     fn validate_address_ok() {
-        let v =
-            validate_address("0xabCDef0123456789ABCDEF0123456789abcdef01", "agent").unwrap();
+        let v = validate_address("0xabCDef0123456789ABCDEF0123456789abcdef01", "agent").unwrap();
         assert_eq!(v, "0xabcdef0123456789abcdef0123456789abcdef01");
     }
 
