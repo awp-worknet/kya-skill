@@ -7,6 +7,8 @@
 //   kya-sign://twitter-claim?api=<base>&chain=8453
 //   kya-sign://telegram-claim?api=<base>&chain=8453
 //   kya-sign://email-claim?api=<base>[&email=<addr>]
+//   kya-sign://agent-email-onboard?api=<base>[&human_email=<addr>][&username=<name>]
+//   kya-sign://agent-email-inbox-otp?api=<base>[&inbox=<addr>]
 //   kya-sign://kyc?api=<base>&owner=0x...
 //   kya-sign://reveal?api=<base>[&type=email_claim|kyc|...]
 //   kya-sign://sign?clip=1
@@ -26,14 +28,12 @@ pub struct ParsedLink {
 
 pub fn parse(input: &str) -> Result<ParsedLink> {
     let s = input.trim();
-    let rest = s
-        .strip_prefix("kya-sign://")
-        .ok_or_else(|| {
-            KyaError::new(
-                ErrorKind::MagicLinkInvalid,
-                format!("expected kya-sign:// scheme, got {input:?}"),
-            )
-        })?;
+    let rest = s.strip_prefix("kya-sign://").ok_or_else(|| {
+        KyaError::new(
+            ErrorKind::MagicLinkInvalid,
+            format!("expected kya-sign:// scheme, got {input:?}"),
+        )
+    })?;
     if rest.is_empty() {
         return Err(KyaError::new(
             ErrorKind::MagicLinkInvalid,
@@ -129,6 +129,21 @@ pub fn dispatch_command(link: &ParsedLink) -> Result<Option<String>> {
                 parts.push(format!("--email {}", shell_escape(e)));
             }
         }
+        "agent-email-onboard" => {
+            parts.push("agent-email-onboard".into());
+            if let Some(e) = p.get("human_email") {
+                parts.push(format!("--human-email {}", shell_escape(e)));
+            }
+            if let Some(u) = p.get("username") {
+                parts.push(format!("--username {}", shell_escape(u)));
+            }
+        }
+        "agent-email-inbox-otp" => {
+            parts.push("agent-email-inbox-otp".into());
+            if let Some(e) = p.get("inbox_email").or_else(|| p.get("inbox")) {
+                parts.push(format!("--inbox-email {}", shell_escape(e)));
+            }
+        }
         "kyc" => {
             parts.push("kyc".into());
             if let Some(o) = p.get("owner") {
@@ -182,8 +197,7 @@ mod tests {
 
     #[test]
     fn parse_basic() {
-        let l =
-            parse("kya-sign://reveal?api=https://kya.link&type=email_claim").unwrap();
+        let l = parse("kya-sign://reveal?api=https://kya.link&type=email_claim").unwrap();
         assert_eq!(l.flow, "reveal");
         assert_eq!(l.params.get("api").unwrap(), "https://kya.link");
         assert_eq!(l.params.get("type").unwrap(), "email_claim");
@@ -212,8 +226,10 @@ mod tests {
         // Magic-link `tweet=` is intentionally ignored — the canonical
         // path is the handoff URL emitted by claim-twitter, and the
         // binary has no `--tweet-url` flag.
-        let l = parse("kya-sign://twitter-claim?api=http://x.test&tweet=https%3A%2F%2Fx.com%2Fa%2Fstatus%2F1")
-            .unwrap();
+        let l = parse(
+            "kya-sign://twitter-claim?api=http://x.test&tweet=https%3A%2F%2Fx.com%2Fa%2Fstatus%2F1",
+        )
+        .unwrap();
         let cmd = dispatch_command(&l).unwrap().unwrap();
         assert!(cmd.contains("claim-twitter"));
         assert!(!cmd.contains("--tweet-url"));
@@ -227,11 +243,30 @@ mod tests {
 
     #[test]
     fn dispatch_set_recipient_accepts_worknet_id() {
-        let l = parse("kya-sign://set-recipient?worknet_id=845300000003&amount=1000")
-            .unwrap();
+        let l = parse("kya-sign://set-recipient?worknet_id=845300000003&amount=1000").unwrap();
         let cmd = dispatch_command(&l).unwrap().unwrap();
         assert!(cmd.contains("set-recipient"));
         assert!(cmd.contains("--worknet 845300000003"));
         assert!(cmd.contains("--amount 1000"));
+    }
+
+    #[test]
+    fn dispatch_agent_email_onboard() {
+        let l = parse(
+            "kya-sign://agent-email-onboard?human_email=owner%40example.com&username=my-agent",
+        )
+        .unwrap();
+        let cmd = dispatch_command(&l).unwrap().unwrap();
+        assert!(cmd.contains("agent-email-onboard"));
+        assert!(cmd.contains("--human-email owner@example.com"));
+        assert!(cmd.contains("--username my-agent"));
+    }
+
+    #[test]
+    fn dispatch_agent_email_inbox_accepts_alias() {
+        let l = parse("kya-sign://agent-email-inbox-otp?inbox=my-agent%40agentmail.to").unwrap();
+        let cmd = dispatch_command(&l).unwrap().unwrap();
+        assert!(cmd.contains("agent-email-inbox-otp"));
+        assert!(cmd.contains("--inbox-email my-agent@agentmail.to"));
     }
 }

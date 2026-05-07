@@ -22,6 +22,11 @@ pub enum ErrorKind {
     EmailCodeInvalid,
     EmailMaxAttempts,
     EmailResendCooldown,
+    // Agent-email (*.agentmail.to) onboarding & inbox-OTP proofs.
+    AgentEmailFeatureOff,
+    AgentmailSignupDedup,
+    AgentmailSignupInvalidUsername,
+    AgentmailProviderUnavailable,
     NotVerified,
     PerAgentCapExceeded,
     NoCapacity,
@@ -55,6 +60,10 @@ impl ErrorKind {
             ErrorKind::EmailCodeInvalid => "EMAIL_CODE_INVALID",
             ErrorKind::EmailMaxAttempts => "EMAIL_MAX_ATTEMPTS",
             ErrorKind::EmailResendCooldown => "EMAIL_RESEND_COOLDOWN",
+            ErrorKind::AgentEmailFeatureOff => "AGENT_EMAIL_FEATURE_OFF",
+            ErrorKind::AgentmailSignupDedup => "AGENTMAIL_SIGNUP_DEDUP",
+            ErrorKind::AgentmailSignupInvalidUsername => "AGENTMAIL_SIGNUP_INVALID_USERNAME",
+            ErrorKind::AgentmailProviderUnavailable => "AGENTMAIL_PROVIDER_UNAVAILABLE",
             ErrorKind::NotVerified => "NOT_VERIFIED",
             ErrorKind::PerAgentCapExceeded => "PER_AGENT_CAP_EXCEEDED",
             ErrorKind::NoCapacity => "NO_CAPACITY",
@@ -72,9 +81,7 @@ impl ErrorKind {
     /// Process exit code per SKILL.md.
     pub fn exit_code(self) -> i32 {
         match self {
-            ErrorKind::InputRequired
-            | ErrorKind::MagicLinkInvalid
-            | ErrorKind::EmailInvalid => 2,
+            ErrorKind::InputRequired | ErrorKind::MagicLinkInvalid | ErrorKind::EmailInvalid => 2,
             ErrorKind::WalletNotConfigured
             | ErrorKind::WalletLocked
             | ErrorKind::WalletInvalidOutput
@@ -83,6 +90,10 @@ impl ErrorKind {
             | ErrorKind::EmailCodeInvalid
             | ErrorKind::EmailMaxAttempts
             | ErrorKind::EmailResendCooldown
+            | ErrorKind::AgentEmailFeatureOff
+            | ErrorKind::AgentmailSignupDedup
+            | ErrorKind::AgentmailSignupInvalidUsername
+            | ErrorKind::AgentmailProviderUnavailable
             | ErrorKind::NotVerified
             | ErrorKind::PerAgentCapExceeded
             | ErrorKind::NoCapacity
@@ -184,6 +195,10 @@ pub fn map_server_code(code: &str) -> ErrorKind {
         "EMAIL_CODE_INVALID" => ErrorKind::EmailCodeInvalid,
         "EMAIL_MAX_ATTEMPTS" => ErrorKind::EmailMaxAttempts,
         "EMAIL_RESEND_COOLDOWN" => ErrorKind::EmailResendCooldown,
+        "AGENT_EMAIL_FEATURE_OFF" => ErrorKind::AgentEmailFeatureOff,
+        "AGENTMAIL_SIGNUP_DEDUP" => ErrorKind::AgentmailSignupDedup,
+        "AGENTMAIL_SIGNUP_INVALID_USERNAME" => ErrorKind::AgentmailSignupInvalidUsername,
+        "AGENTMAIL_PROVIDER_UNAVAILABLE" => ErrorKind::AgentmailProviderUnavailable,
         "AGENT_MISMATCH" => ErrorKind::AgentMismatch,
         "TIMESTAMP_OUT_OF_RANGE" => ErrorKind::TimestampOutOfRange,
         "INVALID_SIGNATURE" => ErrorKind::InvalidSignature,

@@ -10,6 +10,10 @@ trigger_keywords:
   - claim-twitter
   - claim-telegram
   - claim-email
+  - agent-email
+  - agent-email-onboard
+  - agent-email-inbox-otp
+  - agentmail
   - kyc
   - reveal-attestation
   - set-recipient
@@ -416,6 +420,10 @@ kya-agent open "kya-sign://reveal?api=https://kya.link&type=email_claim"
 | `kya-sign://telegram-claim?api=<base>` | `claim-telegram` (handoff URL) |
 | `kya-sign://email-claim?api=<base>` | `claim-email` (prompts for email + code) |
 | `kya-sign://email-claim?api=<base>&email=<addr>` | `claim-email --email <addr>` |
+| `kya-sign://agent-email-onboard?api=<base>` | `agent-email-onboard` (prompts for human-email + username + OTP). Writes `agent_email_claim` with `proof_strength=signup_only`. |
+| `kya-sign://agent-email-onboard?api=<base>&human_email=<addr>&username=<name>` | `agent-email-onboard --human-email <addr> --username <name>` |
+| `kya-sign://agent-email-inbox-otp?api=<base>` | `agent-email-inbox-otp` (prompts for inbox + code). Upserts `agent_email_claim` to `proof_strength=inbox_control`. |
+| `kya-sign://agent-email-inbox-otp?api=<base>&inbox=<addr>@agentmail.to` | `agent-email-inbox-otp --inbox-email <addr>` (`inbox_email` is also accepted) |
 | `kya-sign://kyc?api=<base>&owner=0x...` | `kyc --owner 0x...` |
 | `kya-sign://reveal?api=<base>` | `reveal` (all types) |
 | `kya-sign://reveal?api=<base>&type=<t>` | `reveal --type <t>` |
@@ -440,6 +448,8 @@ dispatched command before it runs.
 | `claim-twitter` | Sign locally, emit a `kya.link/verify/social/claim#…` handoff URL. **Web-driven only** — owner opens the URL, KYA web takes care of the tweet + claim POST. Agent must NOT ask the owner to paste the tweet URL back. |
 | `claim-telegram` | Same shape as `claim-twitter`, public-channel only. |
 | `claim-email` | Bind an email. Two signs sandwich a 6-digit code. TTY prompts; piped requires `--email --code`. |
+| `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped requires `--human-email --username --code`. |
+| `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. TTY prompts; piped requires `--inbox-email --code`. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL, optionally poll until terminal. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. `--type email_claim/kyc/twitter_claim/telegram_claim/staking`. |
 | `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. Pre-checks X/Twitter attestation. |
@@ -465,6 +475,10 @@ streams progress on stderr as NDJSON `step` / `info` lines.
 | `EMAIL_CODE_INVALID` | Re-read the inbox and re-run `kya-agent claim-email --email <addr> --code <CODE>`. |
 | `EMAIL_MAX_ATTEMPTS` | 5 wrong codes — restart with a fresh `kya-agent claim-email`. |
 | `EMAIL_RESEND_COOLDOWN` | Wait ~60 s and retry. |
+| `AGENT_EMAIL_FEATURE_OFF` | Agent-email is disabled on this deployment. Surface verbatim; do not retry. |
+| `AGENTMAIL_SIGNUP_DEDUP` | That human email recently created or attempted an AgentMail inbox for another agent. Use `agent-email-inbox-otp` if the inbox already exists. |
+| `AGENTMAIL_SIGNUP_INVALID_USERNAME` | Pick a 3-32 char lowercase `[a-z0-9-]` username that does not start or end with `-`. |
+| `AGENTMAIL_PROVIDER_UNAVAILABLE` | AgentMail provider is unavailable. Surface verbatim and retry later. |
 | `NOT_VERIFIED` | `set-recipient --amount` requires X/Twitter verification first. Run `kya-agent claim-twitter`. |
 | `PER_AGENT_CAP_EXCEEDED` | Agent already has ≥10 000 AWP delegated-staked. Cannot stack more. |
 | `NO_CAPACITY` | No provider capacity right now. Surface verbatim — do not retry in a tight loop. |
