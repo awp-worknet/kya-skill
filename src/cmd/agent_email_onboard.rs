@@ -11,9 +11,11 @@
 //   2. agent_email_onboard_confirm — hands the OTP that landed in the human
 //      email plus the api_key KYA received back from agentmail.
 //
-// Keep the returned api_key only in memory long enough to confirm the OTP.
+// AgentMail api_key 是后续读取 inbox OTP 的唯一凭据。不要打印它，但注册成功后
+// 要保存到本地受限权限文件，避免用户完成 signup_only 后无法升级 inbox_control。
 
 use super::{poll_attestation, resolve_agent, sign_action, signed, stdin_is_tty, Ctx};
+use crate::agentmail;
 use crate::client;
 use crate::error::{ErrorKind, KyaError, Result};
 use crate::output;
@@ -26,113 +28,6 @@ use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-/// std-only home-dir resolver. Mirrors what `dirs::home_dir` does on the two
-/// platforms we care about. Falls back to None if neither var is set so that
-/// persist_org_key() degrades to a warning instead of panicking.
-fn home_dir() -> Option<PathBuf> {
-    if let Some(h) = std::env::var_os("HOME") {
-        if !h.is_empty() {
-            return Some(PathBuf::from(h));
-        }
-    }
-    if let Some(h) = std::env::var_os("USERPROFILE") {
-        if !h.is_empty() {
-            return Some(PathBuf::from(h));
-        }
-    }
-    None
-}
-
-/// Persist the AgentMail organization-level api_key returned by signUp into
-/// `~/.kya/agentmail-org-key` (chmod 600 on Unix). Re-running onboard will
-/// rotate the upstream key, so we always overwrite. Best-effort: any IO error
-/// is downgraded to a warning step so the verify flow itself still finishes.
-fn persist_org_key(api_key: &str) -> Option<PathBuf> {
-    let home = home_dir()?;
-    let dir = home.join(".kya");
-    if let Err(e) = fs::create_dir_all(&dir) {
-        output::step(
-            "agent_email_onboard.org_key_persist.warn",
-            json!({ "error": format!("mkdir {}: {e}", dir.display()) }),
-        );
-        return None;
-    }
-    let path = dir.join("agentmail-org-key");
-    let body = format!(
-        "# AgentMail organization API key — KYA agent-email onboard\n\
-         # Created by kya-agent at {}.\n\
-         # Treat this file like a password; deleting an inbox in console.agentmail.to\n\
-         # never invalidates this key, but re-running `kya-agent agent-email-onboard`\n\
-         # will rotate it.\n\
-         {}\n",
-        chrono_like_iso8601(crate::eip712::now_unix_seconds()),
-        api_key,
-    );
-    if let Err(e) = overwrite_secret_file(&path, body.as_bytes()) {
-        output::step(
-            "agent_email_onboard.org_key_persist.warn",
-            json!({ "error": format!("write {}: {e}", path.display()) }),
-        );
-        return None;
-    }
-    Some(path)
-}
-
-#[cfg(unix)]
-fn overwrite_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
-    use std::os::unix::fs::OpenOptionsExt;
-    if path.exists() {
-        let _ = fs::remove_file(path);
-    }
-    let mut file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)?;
-    file.write_all(bytes)?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn overwrite_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
-    if path.exists() {
-        let _ = fs::remove_file(path);
-    }
-    let mut file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(path)?;
-    file.write_all(bytes)?;
-    Ok(())
-}
-
-/// 不引 chrono crate;手搓一个能展示秒级 UTC 的 ISO8601。only used in
-/// the persisted-key file header for human inspection, never parsed back.
-fn chrono_like_iso8601(unix_seconds: u64) -> String {
-    let days_from_epoch = unix_seconds / 86_400;
-    let seconds_in_day = unix_seconds % 86_400;
-    let h = seconds_in_day / 3600;
-    let m = (seconds_in_day % 3600) / 60;
-    let s = seconds_in_day % 60;
-    let (year, month, day) = civil_from_days(days_from_epoch as i64);
-    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
-}
-
-/// days from 1970-01-01 → (year, month, day). Hinnant's algorithm.
-fn civil_from_days(z: i64) -> (i32, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = (y + if m <= 2 { 1 } else { 0 }) as i32;
-    (year, m as u32, d as u32)
-}
 
 static EMAIL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").expect("email regex"));
@@ -172,6 +67,8 @@ struct OnboardState {
     human_email: String,
     username: String,
     inbox_email: String,
+    #[serde(default)]
+    inbox_id: String,
     api_key: String,
     api_base: String,
     chain_id: u64,
@@ -215,16 +112,22 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         .and_then(|x| x.as_str())
         .unwrap_or("")
         .to_string();
-    if inbox_email.is_empty() || api_key.is_empty() {
+    let inbox_id = prepared
+        .get("inbox_id")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    if inbox_email.is_empty() || inbox_id.is_empty() || api_key.is_empty() {
         return Err(KyaError::new(
             ErrorKind::KyaError,
-            "unexpected onboard/prepare response: missing inbox_email or api_key",
+            "unexpected onboard/prepare response: missing inbox_email, inbox_id, or api_key",
         ));
     }
     output::step(
         "prepare.ok",
         json!({
             "inbox_email": &inbox_email,
+            "inbox_id": &inbox_id,
             "expires_at": prepared.get("expires_at"),
             "otp_channel": "human_email",
         }),
@@ -236,6 +139,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             human_email: human_email.clone(),
             username: username.clone(),
             inbox_email: inbox_email.clone(),
+            inbox_id,
             api_key,
             api_base: ctx.api_base.clone(),
             chain_id: ctx.chain_id,
@@ -252,7 +156,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
                 "human_email": &human_email,
                 "inbox_email": &inbox_email,
                 "state_path": path.to_string_lossy(),
-                "note": "OTP sent to the human email. The local state file contains a short-lived AgentMail api_key and will be deleted after confirm.",
+                "note": "OTP sent to the human email. The local state file contains the AgentMail api_key; confirm will save it to the local key store before deleting the state file.",
             }),
             "wait_for_otp",
             Some(&next_command),
@@ -284,12 +188,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             format!("unexpected onboard/confirm response: {confirmed}"),
         ));
     }
+    let key_path =
+        agentmail::save_key(&agent, &inbox_email, &inbox_id, &api_key, "", ctx.chain_id)?;
+    emit_key_saved_notice(&inbox_email, &key_path);
     output::step(
         "confirm.ok",
         json!({
             "attestation_id": &attestation_id,
             "proof_strength": "signup_only",
             "status": confirmed.get("status"),
+            "agentmail_key_path": key_path.to_string_lossy(),
         }),
     );
 
@@ -330,17 +238,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         )
     };
 
-    let key_path = persist_org_key(&api_key);
     let body = json!({
         "agent_address": &agent,
         "attestation_id": &attestation_id,
         "status": final_status,
         "proof_strength": "signup_only",
         "inbox_email": &inbox_email,
-        "agentmail_org_key": &api_key,
-        "agentmail_org_key_path": key_path.as_ref().map(|p| p.to_string_lossy().to_string()),
-        "save_org_key_hint": "Save this AgentMail organization API key — needed to add more inboxes or re-verify later. KYA does not store it.",
-        "upgrade_hint": "run `kya-agent agent-email-inbox-otp` after wiring an AgentMail API key to your agent",
+        "inbox_id": &inbox_id,
+        "agentmail_key_path": key_path.to_string_lossy(),
+        "credential_warning": agentmail::key_warning(&inbox_email),
+        "upgrade_hint": "keep the saved AgentMail key; it is required to read future inbox OTPs and upgrade to inbox_control",
         "timed_out": timed_out,
     });
     output::ok(body, "ready", None);
@@ -389,6 +296,15 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
             format!("unexpected onboard/confirm response: {confirmed}"),
         ));
     }
+    let key_path = agentmail::save_key(
+        &state.agent_address,
+        &state.inbox_email,
+        &state.inbox_id,
+        &state.api_key,
+        "",
+        state.chain_id,
+    )?;
+    emit_key_saved_notice(&state.inbox_email, &key_path);
     let _ = fs::remove_file(&path);
     output::step(
         "confirm.ok",
@@ -397,6 +313,7 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
             "proof_strength": "signup_only",
             "status": confirmed.get("status"),
             "state_deleted": true,
+            "agentmail_key_path": key_path.to_string_lossy(),
         }),
     );
 
@@ -437,7 +354,6 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
         )
     };
 
-    let key_path = persist_org_key(&state.api_key);
     output::ok(
         json!({
             "agent_address": &state.agent_address,
@@ -445,10 +361,10 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
             "status": final_status,
             "proof_strength": "signup_only",
             "inbox_email": &state.inbox_email,
-            "agentmail_org_key": &state.api_key,
-            "agentmail_org_key_path": key_path.as_ref().map(|p| p.to_string_lossy().to_string()),
-            "save_org_key_hint": "Save this AgentMail organization API key — needed to add more inboxes or re-verify later. KYA does not store it.",
-            "upgrade_hint": "run `kya-agent agent-email-inbox-otp` after wiring an AgentMail API key to your agent",
+            "inbox_id": &state.inbox_id,
+            "agentmail_key_path": key_path.to_string_lossy(),
+            "credential_warning": agentmail::key_warning(&state.inbox_email),
+            "upgrade_hint": "keep the saved AgentMail key; it is required to read future inbox OTPs and upgrade to inbox_control",
             "timed_out": timed_out,
         }),
         "ready",
@@ -498,6 +414,17 @@ fn write_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
 fn read_state_file(path: &Path) -> Result<OnboardState> {
     let raw = fs::read(path)?;
     serde_json::from_slice(&raw).map_err(KyaError::from)
+}
+
+fn emit_key_saved_notice(inbox_email: &str, path: &Path) {
+    output::info(
+        "IMPORTANT: AgentMail inbox key saved locally",
+        json!({
+            "inbox_email": inbox_email,
+            "agentmail_key_path": path.to_string_lossy(),
+            "warning": agentmail::key_warning(inbox_email),
+        }),
+    );
 }
 
 fn shell_quote(path: &Path) -> String {
