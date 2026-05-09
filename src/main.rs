@@ -6,6 +6,7 @@
 use clap::{Parser, Subcommand};
 
 mod address;
+mod agentmail;
 mod client;
 mod cmd;
 mod eip712;
@@ -64,6 +65,8 @@ enum Command {
     ClaimEmail(cmd::claim_email::Args),
     /// Agent-email onboard (left card) — KYA proxies agentmail signUp + verify. Writes agent_email_claim with proof_strength=signup_only.
     AgentEmailOnboard(cmd::agent_email_onboard::Args),
+    /// Agent-email existing organization — create a new inbox with an AgentMail API key, then prove inbox control.
+    AgentEmailExistingOrg(cmd::agent_email_existing_org::Args),
     /// Agent-email inbox-OTP (right card) — prove inbox control. Upgrades or creates agent_email_claim with proof_strength=inbox_control.
     AgentEmailInboxOtp(cmd::agent_email_inbox_otp::Args),
     /// KYC — sign KycInit, create Didit session, poll terminal status.
@@ -102,6 +105,7 @@ fn main() {
         Command::ClaimTelegram(a) => cmd::claim_telegram::run(&ctx, a),
         Command::ClaimEmail(a) => cmd::claim_email::run(&ctx, a),
         Command::AgentEmailOnboard(a) => cmd::agent_email_onboard::run(&ctx, a),
+        Command::AgentEmailExistingOrg(a) => cmd::agent_email_existing_org::run(&ctx, a),
         Command::AgentEmailInboxOtp(a) => cmd::agent_email_inbox_otp::run(&ctx, a),
         Command::Kyc(a) => cmd::kyc::run(&ctx, a),
         Command::Reveal(a) => cmd::reveal::run(&ctx, a),

@@ -8,6 +8,7 @@
 //   kya-sign://telegram-claim?api=<base>&chain=8453
 //   kya-sign://email-claim?api=<base>[&email=<addr>]
 //   kya-sign://agent-email-onboard?api=<base>[&human_email=<addr>][&username=<name>]
+//   kya-sign://agent-email-existing-org?api=<base>[&username=<name>]
 //   kya-sign://agent-email-inbox-otp?api=<base>[&inbox=<addr>]
 //   kya-sign://kyc?api=<base>&owner=0x...
 //   kya-sign://reveal?api=<base>[&type=email_claim|kyc|...]
@@ -134,6 +135,12 @@ pub fn dispatch_command(link: &ParsedLink) -> Result<Option<String>> {
             if let Some(e) = p.get("human_email") {
                 parts.push(format!("--human-email {}", shell_escape(e)));
             }
+            if let Some(u) = p.get("username") {
+                parts.push(format!("--username {}", shell_escape(u)));
+            }
+        }
+        "agent-email-existing-org" => {
+            parts.push("agent-email-existing-org".into());
             if let Some(u) = p.get("username") {
                 parts.push(format!("--username {}", shell_escape(u)));
             }
@@ -268,5 +275,13 @@ mod tests {
         let cmd = dispatch_command(&l).unwrap().unwrap();
         assert!(cmd.contains("agent-email-inbox-otp"));
         assert!(cmd.contains("--inbox-email my-agent@agentmail.to"));
+    }
+
+    #[test]
+    fn dispatch_agent_email_existing_org() {
+        let l = parse("kya-sign://agent-email-existing-org?username=xin-agent233").unwrap();
+        let cmd = dispatch_command(&l).unwrap().unwrap();
+        assert!(cmd.contains("agent-email-existing-org"));
+        assert!(cmd.contains("--username xin-agent233"));
     }
 }

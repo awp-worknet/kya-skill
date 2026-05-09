@@ -37,6 +37,7 @@ const KNOWN_ACTIONS: &[&str] = &[
     "email_confirm",
     "agent_email_onboard_prepare",
     "agent_email_onboard_confirm",
+    "agent_email_existing_org_prepare",
     "agent_email_inbox_otp_prepare",
     "agent_email_inbox_otp_confirm",
     "delegated_staking_request",
