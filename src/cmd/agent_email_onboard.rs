@@ -27,6 +27,113 @@ use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+/// std-only home-dir resolver. Mirrors what `dirs::home_dir` does on the two
+/// platforms we care about. Falls back to None if neither var is set so that
+/// persist_org_key() degrades to a warning instead of panicking.
+fn home_dir() -> Option<PathBuf> {
+    if let Some(h) = std::env::var_os("HOME") {
+        if !h.is_empty() {
+            return Some(PathBuf::from(h));
+        }
+    }
+    if let Some(h) = std::env::var_os("USERPROFILE") {
+        if !h.is_empty() {
+            return Some(PathBuf::from(h));
+        }
+    }
+    None
+}
+
+/// Persist the AgentMail organization-level api_key returned by signUp into
+/// `~/.kya/agentmail-org-key` (chmod 600 on Unix). Re-running onboard will
+/// rotate the upstream key, so we always overwrite. Best-effort: any IO error
+/// is downgraded to a warning step so the verify flow itself still finishes.
+fn persist_org_key(api_key: &str) -> Option<PathBuf> {
+    let home = home_dir()?;
+    let dir = home.join(".kya");
+    if let Err(e) = fs::create_dir_all(&dir) {
+        output::step(
+            "agent_email_onboard.org_key_persist.warn",
+            json!({ "error": format!("mkdir {}: {e}", dir.display()) }),
+        );
+        return None;
+    }
+    let path = dir.join("agentmail-org-key");
+    let body = format!(
+        "# AgentMail organization API key — KYA agent-email onboard\n\
+         # Created by kya-agent at {}.\n\
+         # Treat this file like a password; deleting an inbox in console.agentmail.to\n\
+         # never invalidates this key, but re-running `kya-agent agent-email-onboard`\n\
+         # will rotate it.\n\
+         {}\n",
+        chrono_like_iso8601(crate::eip712::now_unix_seconds()),
+        api_key,
+    );
+    if let Err(e) = overwrite_secret_file(&path, body.as_bytes()) {
+        output::step(
+            "agent_email_onboard.org_key_persist.warn",
+            json!({ "error": format!("write {}: {e}", path.display()) }),
+        );
+        return None;
+    }
+    Some(path)
+}
+
+#[cfg(unix)]
+fn overwrite_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn overwrite_secret_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
+    let mut file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+/// 不引 chrono crate;手搓一个能展示秒级 UTC 的 ISO8601。only used in
+/// the persisted-key file header for human inspection, never parsed back.
+fn chrono_like_iso8601(unix_seconds: u64) -> String {
+    let days_from_epoch = unix_seconds / 86_400;
+    let seconds_in_day = unix_seconds % 86_400;
+    let h = seconds_in_day / 3600;
+    let m = (seconds_in_day % 3600) / 60;
+    let s = seconds_in_day % 60;
+    let (year, month, day) = civil_from_days(days_from_epoch as i64);
+    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+/// days from 1970-01-01 → (year, month, day). Hinnant's algorithm.
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = (y + if m <= 2 { 1 } else { 0 }) as i32;
+    (year, m as u32, d as u32)
+}
+
 static EMAIL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").expect("email regex"));
 static USERNAME_RE: Lazy<Regex> =
@@ -223,12 +330,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
         )
     };
 
+    let key_path = persist_org_key(&api_key);
     let body = json!({
         "agent_address": &agent,
         "attestation_id": &attestation_id,
         "status": final_status,
         "proof_strength": "signup_only",
         "inbox_email": &inbox_email,
+        "agentmail_org_key": &api_key,
+        "agentmail_org_key_path": key_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+        "save_org_key_hint": "Save this AgentMail organization API key — needed to add more inboxes or re-verify later. KYA does not store it.",
         "upgrade_hint": "run `kya-agent agent-email-inbox-otp` after wiring an AgentMail API key to your agent",
         "timed_out": timed_out,
     });
@@ -326,6 +437,7 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
         )
     };
 
+    let key_path = persist_org_key(&state.api_key);
     output::ok(
         json!({
             "agent_address": &state.agent_address,
@@ -333,6 +445,9 @@ fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {
             "status": final_status,
             "proof_strength": "signup_only",
             "inbox_email": &state.inbox_email,
+            "agentmail_org_key": &state.api_key,
+            "agentmail_org_key_path": key_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+            "save_org_key_hint": "Save this AgentMail organization API key — needed to add more inboxes or re-verify later. KYA does not store it.",
             "upgrade_hint": "run `kya-agent agent-email-inbox-otp` after wiring an AgentMail API key to your agent",
             "timed_out": timed_out,
         }),

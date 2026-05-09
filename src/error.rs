@@ -28,6 +28,7 @@ pub enum ErrorKind {
     AgentmailApiKeyInvalid,
     AgentmailSignupDedup,
     AgentmailSignupInvalidUsername,
+    AgentmailUsernameTaken,
     AgentmailProviderUnavailable,
     NotVerified,
     PerAgentCapExceeded,
@@ -67,6 +68,7 @@ impl ErrorKind {
             ErrorKind::AgentmailApiKeyInvalid => "AGENTMAIL_API_KEY_INVALID",
             ErrorKind::AgentmailSignupDedup => "AGENTMAIL_SIGNUP_DEDUP",
             ErrorKind::AgentmailSignupInvalidUsername => "AGENTMAIL_SIGNUP_INVALID_USERNAME",
+            ErrorKind::AgentmailUsernameTaken => "AGENTMAIL_USERNAME_TAKEN",
             ErrorKind::AgentmailProviderUnavailable => "AGENTMAIL_PROVIDER_UNAVAILABLE",
             ErrorKind::NotVerified => "NOT_VERIFIED",
             ErrorKind::PerAgentCapExceeded => "PER_AGENT_CAP_EXCEEDED",
@@ -99,6 +101,7 @@ impl ErrorKind {
             | ErrorKind::AgentmailApiKeyInvalid
             | ErrorKind::AgentmailSignupDedup
             | ErrorKind::AgentmailSignupInvalidUsername
+            | ErrorKind::AgentmailUsernameTaken
             | ErrorKind::AgentmailProviderUnavailable
             | ErrorKind::NotVerified
             | ErrorKind::PerAgentCapExceeded
@@ -206,6 +209,7 @@ pub fn map_server_code(code: &str) -> ErrorKind {
         "AGENTMAIL_API_KEY_INVALID" => ErrorKind::AgentmailApiKeyInvalid,
         "AGENTMAIL_SIGNUP_DEDUP" => ErrorKind::AgentmailSignupDedup,
         "AGENTMAIL_SIGNUP_INVALID_USERNAME" => ErrorKind::AgentmailSignupInvalidUsername,
+        "AGENTMAIL_USERNAME_TAKEN" => ErrorKind::AgentmailUsernameTaken,
         "AGENTMAIL_PROVIDER_UNAVAILABLE" => ErrorKind::AgentmailProviderUnavailable,
         "AGENT_MISMATCH" => ErrorKind::AgentMismatch,
         "TIMESTAMP_OUT_OF_RANGE" => ErrorKind::TimestampOutOfRange,
