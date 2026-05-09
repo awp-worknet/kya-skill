@@ -24,6 +24,8 @@ pub enum ErrorKind {
     EmailResendCooldown,
     // Agent-email (*.agentmail.to) onboarding & inbox-OTP proofs.
     AgentEmailFeatureOff,
+    AgentmailOrganizationExists,
+    AgentmailApiKeyInvalid,
     AgentmailSignupDedup,
     AgentmailSignupInvalidUsername,
     AgentmailProviderUnavailable,
@@ -61,6 +63,8 @@ impl ErrorKind {
             ErrorKind::EmailMaxAttempts => "EMAIL_MAX_ATTEMPTS",
             ErrorKind::EmailResendCooldown => "EMAIL_RESEND_COOLDOWN",
             ErrorKind::AgentEmailFeatureOff => "AGENT_EMAIL_FEATURE_OFF",
+            ErrorKind::AgentmailOrganizationExists => "AGENTMAIL_ORGANIZATION_EXISTS",
+            ErrorKind::AgentmailApiKeyInvalid => "AGENTMAIL_API_KEY_INVALID",
             ErrorKind::AgentmailSignupDedup => "AGENTMAIL_SIGNUP_DEDUP",
             ErrorKind::AgentmailSignupInvalidUsername => "AGENTMAIL_SIGNUP_INVALID_USERNAME",
             ErrorKind::AgentmailProviderUnavailable => "AGENTMAIL_PROVIDER_UNAVAILABLE",
@@ -91,6 +95,8 @@ impl ErrorKind {
             | ErrorKind::EmailMaxAttempts
             | ErrorKind::EmailResendCooldown
             | ErrorKind::AgentEmailFeatureOff
+            | ErrorKind::AgentmailOrganizationExists
+            | ErrorKind::AgentmailApiKeyInvalid
             | ErrorKind::AgentmailSignupDedup
             | ErrorKind::AgentmailSignupInvalidUsername
             | ErrorKind::AgentmailProviderUnavailable
@@ -196,6 +202,8 @@ pub fn map_server_code(code: &str) -> ErrorKind {
         "EMAIL_MAX_ATTEMPTS" => ErrorKind::EmailMaxAttempts,
         "EMAIL_RESEND_COOLDOWN" => ErrorKind::EmailResendCooldown,
         "AGENT_EMAIL_FEATURE_OFF" => ErrorKind::AgentEmailFeatureOff,
+        "AGENTMAIL_ORGANIZATION_EXISTS" => ErrorKind::AgentmailOrganizationExists,
+        "AGENTMAIL_API_KEY_INVALID" => ErrorKind::AgentmailApiKeyInvalid,
         "AGENTMAIL_SIGNUP_DEDUP" => ErrorKind::AgentmailSignupDedup,
         "AGENTMAIL_SIGNUP_INVALID_USERNAME" => ErrorKind::AgentmailSignupInvalidUsername,
         "AGENTMAIL_PROVIDER_UNAVAILABLE" => ErrorKind::AgentmailProviderUnavailable,

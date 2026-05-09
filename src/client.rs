@@ -208,6 +208,26 @@ pub fn agent_email_onboard_confirm(
     )
 }
 
+pub fn agent_email_existing_org_prepare(
+    api_base: &str,
+    agent_address: &str,
+    username: &str,
+    agentmail_api_key: &str,
+    headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/attestations/agent-email/existing-org/prepare"),
+        Some(headers),
+        Some(&json!({
+            "agent_address": agent_address,
+            "username": username,
+            "agentmail_api_key": agentmail_api_key,
+        })),
+        "agent_email_existing_org_prepare",
+    )
+}
+
 pub fn agent_email_inbox_otp_prepare(
     api_base: &str,
     agent_address: &str,
