@@ -365,6 +365,7 @@ About to request delegated staking:
   agent      0xabc...
   worknet    <worknet_id>   ← explicit target WorkNet selected by the owner
   amount     <N> AWP        ← owner picks; per-agent cap is 10 000 AWP
+  requester  0xowner...     ← optional owner wallet for the reward share
 
 This will:
   1. Sign AWPRegistry.SetRecipient → relay broadcasts (gasless, no ETH).
@@ -376,12 +377,15 @@ Proceed?
 After confirmation:
 
 ```sh
-kya-agent set-recipient --worknet <worknet_id> --amount <N>
+kya-agent set-recipient --worknet <worknet_id> --amount <N> --requester <owner_wallet>
 ```
 
 For this full delegated-staking path, `kya-agent` intentionally fetches
 the KYA deposit address without `worknet_id`. The `--amount` value is
 carried with `--worknet` only in Stage 2 (`delegated_staking_request`).
+If the owner wallet is known, pass it as `--requester`; the binary sends
+it to KYA as `requester_address` so KYA can route the owner reward share
+without falling back to the agent EOA.
 The legacy deposit-address `worknet_id` path means "enter awaiting_match"
 and can trigger the fixed admission-threshold allocation instead of the
 owner's requested amount, so the binary deliberately omits worknet from
@@ -443,7 +447,7 @@ kya-agent open "kya-sign://reveal?api=https://kya.link&type=email_claim"
 | `kya-sign://reveal?api=<base>` | `reveal` (all types) |
 | `kya-sign://reveal?api=<base>&type=<t>` | `reveal --type <t>` |
 | `kya-sign://set-recipient?api=<base>` | `set-recipient` (stage 1 only — point recipient at KYA deposit) |
-| `kya-sign://set-recipient?api=<base>&worknet_id=<id>&amount=<awp>` | `set-recipient --worknet <id> --amount <awp>` (full delegated-staking) |
+| `kya-sign://set-recipient?api=<base>&worknet_id=<id>&amount=<awp>&requester=0x...` | `set-recipient --worknet <id> --amount <awp> --requester 0x...` (full delegated-staking; `requester_address` and `owner` aliases are also accepted) |
 | `kya-sign://set-recipient?api=<base>&worknet=<id>&amount=<awp>` | same as above; legacy alias for `worknet_id` |
 | `kya-sign://grant-delegate` | `grant-delegate` |
 | `kya-sign://sign?clip=1` | `sign --from-clipboard` |
@@ -541,6 +545,10 @@ outcome.
   explicit WorkNet id in Stage 2 (`delegated_staking_request`). If the
   magic link lacks `worknet_id`, stop and ask the owner to choose the
   target WorkNet in KYA web.
+- **Pass `--requester` when the owner wallet is known.** KYA accepts this
+  as `requester_address` on the delegated-staking request and uses it for
+  owner reward routing. Omitting it keeps legacy behavior and lets KYA
+  fall back to its server-side owner/agent resolution chain.
 - **Telegram claim is public-channel only** (`t.me/<channel>/<msg_id>`).
   KYA fetches the public web preview; private DMs and unlisted groups
   cannot be verified.

@@ -85,7 +85,7 @@ your `PATH`.
 | `claim-email` | Bind an email — two signs sandwich a 6-digit code. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. |
-| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. |
+| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`; pass `--requester <owner_wallet>` when known so KYA receives `requester_address`. |
 | `staking-status` | Re-check a delegated-staking request's status. |
 | `grant-delegate` | Provider side: authorize `KyaAllocatorProxy` to allocate on your behalf, gasless via relayer. |
 | `sign` / `sign-action` | Generic / single-shot EIP-712 signers. |

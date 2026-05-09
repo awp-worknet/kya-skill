@@ -322,7 +322,25 @@ pub fn request_delegated_staking(
     agent_address: &str,
     amount_wei: &str,
     worknet_id: &str,
+    requester_address: Option<&str>,
     headers: SignedHeaders<'_>,
+) -> Result<Value> {
+    let body =
+        delegated_staking_request_body(agent_address, amount_wei, worknet_id, requester_address)?;
+    http_request(
+        Method::POST,
+        &format!("{api_base}/v1/services/staking/request"),
+        Some(headers),
+        Some(&body),
+        "delegated_staking_request",
+    )
+}
+
+fn delegated_staking_request_body(
+    agent_address: &str,
+    amount_wei: &str,
+    worknet_id: &str,
+    requester_address: Option<&str>,
 ) -> Result<Value> {
     if amount_wei.is_empty() || amount_wei == "0" || !amount_wei.chars().all(|c| c.is_ascii_digit())
     {
@@ -331,17 +349,17 @@ pub fn request_delegated_staking(
             format!("amount_wei must be a positive integer string, got {amount_wei:?}"),
         ));
     }
-    http_request(
-        Method::POST,
-        &format!("{api_base}/v1/services/staking/request"),
-        Some(headers),
-        Some(&json!({
-            "agent_address": agent_address,
-            "amount_wei": amount_wei,
-            "worknet_id": worknet_id,
-        })),
-        "delegated_staking_request",
-    )
+    let mut body = json!({
+        "agent_address": agent_address,
+        "amount_wei": amount_wei,
+        "worknet_id": worknet_id,
+    });
+    if let Some(requester) = requester_address {
+        if !requester.trim().is_empty() {
+            body["requester_address"] = json!(requester);
+        }
+    }
+    Ok(body)
 }
 
 pub fn list_staking_requests(api_base: &str, agent_address: &str) -> Result<Vec<Value>> {
@@ -408,4 +426,36 @@ pub fn ping(api_base: &str) -> Result<()> {
         ErrorKind::KyaUnreachable,
         format!("KYA API ping returned {status}"),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delegated_staking_body_includes_requester_when_present() {
+        let body = delegated_staking_request_body(
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "1000000000000000000",
+            "845300000012",
+            Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+        )
+        .unwrap();
+        assert_eq!(
+            body.get("requester_address").and_then(|v| v.as_str()),
+            Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+    }
+
+    #[test]
+    fn delegated_staking_body_omits_empty_requester() {
+        let body = delegated_staking_request_body(
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "1000000000000000000",
+            "845300000012",
+            Some(""),
+        )
+        .unwrap();
+        assert!(body.get("requester_address").is_none());
+    }
 }

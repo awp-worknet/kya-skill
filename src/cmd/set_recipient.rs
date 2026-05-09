@@ -20,6 +20,9 @@ pub struct Args {
     /// AWP decimal amount the owner wants matched. Triggers stage 2 when set.
     #[arg(long, default_value = "")]
     pub amount: String,
+    /// Owner wallet that should receive the delegated-staking reward share.
+    #[arg(long, default_value = "")]
+    pub requester: String,
     #[arg(long, default_value_t = 3600)]
     pub deadline_seconds: u64,
     #[arg(long)]
@@ -39,6 +42,11 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     } else {
         Some(validate_amount(&args.amount)?)
     };
+    let requester = if args.requester.is_empty() {
+        None
+    } else {
+        Some(validate_address(&args.requester, "--requester")?)
+    };
     let stage2_worknet = if amount_awp_norm.is_some() {
         Some(validate_worknet_id(&args.worknet)?)
     } else {
@@ -47,7 +55,10 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     if amount_awp_norm.is_some() {
         output::step(
             "amount.resolved",
-            json!({ "amount_awp": amount_awp_norm.as_deref() }),
+            json!({
+                "amount_awp": amount_awp_norm.as_deref(),
+                "requester_address": requester.as_deref(),
+            }),
         );
         output::step(
             "worknet.resolved",
@@ -163,6 +174,7 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
             &agent,
             &amount_awp,
             stage2_worknet.as_deref().unwrap_or(""),
+            requester.as_deref(),
         )?);
 
         if let Some(req_obj) = staking_request
@@ -366,6 +378,7 @@ fn post_delegated_staking_request(
     agent: &str,
     amount_awp: &str,
     worknet_id: &str,
+    requester_address: Option<&str>,
 ) -> Result<serde_json::Value> {
     let amount_wei = awp_to_wei(amount_awp)?;
     output::step(
@@ -375,6 +388,7 @@ fn post_delegated_staking_request(
             "amount_awp": amount_awp,
             "amount_wei": &amount_wei,
             "worknet_id": worknet_id,
+            "requester_address": requester_address,
         }),
     );
     let (sig, ts, n) = sign_action(ctx, "delegated_staking_request", agent)?;
@@ -383,6 +397,7 @@ fn post_delegated_staking_request(
         agent,
         &amount_wei,
         worknet_id,
+        requester_address,
         signed(&sig, ts, &n),
     )
 }
