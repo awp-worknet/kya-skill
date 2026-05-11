@@ -132,7 +132,14 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
     }
 
     let code = resolve_code(&args)?;
-    confirm_inbox_otp(ctx, &agent, &inbox_email, &code, args.no_poll, args.poll_timeout)
+    confirm_inbox_otp(
+        ctx,
+        &agent,
+        &inbox_email,
+        &code,
+        args.no_poll,
+        args.poll_timeout,
+    )
 }
 
 fn run_confirm_from_state(ctx: &Ctx, args: &Args) -> Result<()> {

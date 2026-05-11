@@ -13,7 +13,7 @@
 //   kya-sign://kyc?api=<base>&owner=0x...
 //   kya-sign://reveal?api=<base>[&type=email_claim|kyc|...]
 //   kya-sign://sign?clip=1
-//   kya-sign://set-recipient?api=<base>&worknet_id=<id>[&amount=<awp>]
+//   kya-sign://set-recipient?api=<base>&worknet_id=<id>[&amount=<awp>][&requester=0x...]
 //   kya-sign://set-recipient?api=<base>&worknet=<id>[&amount=<awp>]  (legacy alias)
 //   kya-sign://set-recipient?recipient=0xdeposit...
 //   kya-sign://grant-delegate
@@ -180,6 +180,13 @@ pub fn dispatch_command(link: &ParsedLink) -> Result<Option<String>> {
             if let Some(a) = p.get("amount") {
                 parts.push(format!("--amount {}", shell_escape(a)));
             }
+            if let Some(r) = p
+                .get("requester")
+                .or_else(|| p.get("requester_address"))
+                .or_else(|| p.get("owner"))
+            {
+                parts.push(format!("--requester {}", shell_escape(r)));
+            }
         }
         "grant-delegate" => parts.push("grant-delegate".into()),
         _ => return Ok(None),
@@ -255,6 +262,14 @@ mod tests {
         assert!(cmd.contains("set-recipient"));
         assert!(cmd.contains("--worknet 845300000003"));
         assert!(cmd.contains("--amount 1000"));
+    }
+
+    #[test]
+    fn dispatch_set_recipient_accepts_requester_aliases() {
+        let l = parse("kya-sign://set-recipient?owner=0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            .unwrap();
+        let cmd = dispatch_command(&l).unwrap().unwrap();
+        assert!(cmd.contains("--requester 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     }
 
     #[test]

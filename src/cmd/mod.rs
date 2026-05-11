@@ -9,8 +9,8 @@ use crate::wallet;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
-pub mod agent_email_inbox_otp;
 pub mod agent_email_existing_org;
+pub mod agent_email_inbox_otp;
 pub mod agent_email_onboard;
 pub mod attestations;
 pub mod bootstrap;

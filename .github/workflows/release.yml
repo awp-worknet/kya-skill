@@ -98,10 +98,16 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Stage install script
+        run: |
+          cp install.sh dist/install.sh
+          chmod +x dist/install.sh
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/install.sh
             dist/kya-agent-*
           generate_release_notes: true
           fail_on_unmatched_files: true

@@ -83,9 +83,11 @@ your `PATH`.
 | `claim-twitter` | Sign locally, emit a `kya.link/verify/social/claim#…` handoff URL. **Web-driven only.** |
 | `claim-telegram` | Same shape as `claim-twitter`, public-channel only. |
 | `claim-email` | Bind an email — two signs sandwich a 6-digit code. |
+| `agent-email-onboard` | Create a new `*@agentmail.to` inbox via KYA + AgentMail sign-up. |
+| `agent-email-inbox-otp` | Verify an existing `*@agentmail.to` inbox. KYA sends an OTP; non-TTY callers should run the returned `--state <file> --code <OTP>` command so confirming the code does not send a fresh OTP. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. |
-| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. |
+| `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`; pass `--requester <owner_wallet>` when known so KYA receives `requester_address`. |
 | `staking-status` | Re-check a delegated-staking request's status. |
 | `grant-delegate` | Provider side: authorize `KyaAllocatorProxy` to allocate on your behalf, gasless via relayer. |
 | `sign` / `sign-action` | Generic / single-shot EIP-712 signers. |
