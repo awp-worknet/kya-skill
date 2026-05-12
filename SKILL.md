@@ -96,10 +96,10 @@ metadata:
         description: awp-wallet session token; only legacy awp-wallet (<v0.17) needs this
       - name: AGENTMAIL_API_KEY
         required: false
-        description: AgentMail inbox key; used by agent-email-inbox-otp to auto-read KYA OTPs
+        description: Optional advanced AgentMail inbox key; used only when agent-email-inbox-otp is run with --auto-read
       - name: AGENTMAIL_INBOX_ID
         required: false
-        description: AgentMail inbox_id; optional when the key can list inboxes
+        description: Optional AgentMail inbox_id for --auto-read
       - name: AGENTMAIL_API_BASE
         required: false
         description: AgentMail API base URL (default https://api.agentmail.to)
@@ -365,6 +365,7 @@ About to request delegated staking:
   agent      0xabc...
   worknet    <worknet_id>   ← explicit target WorkNet selected by the owner
   amount     <N> AWP        ← owner picks; per-agent cap is 10 000 AWP
+  requester  0xowner...     ← optional owner wallet for the reward share
 
 This will:
   1. Sign AWPRegistry.SetRecipient → relay broadcasts (gasless, no ETH).
@@ -376,12 +377,15 @@ Proceed?
 After confirmation:
 
 ```sh
-kya-agent set-recipient --worknet <worknet_id> --amount <N>
+kya-agent set-recipient --worknet <worknet_id> --amount <N> --requester <owner_wallet>
 ```
 
 For this full delegated-staking path, `kya-agent` intentionally fetches
 the KYA deposit address without `worknet_id`. The `--amount` value is
 carried with `--worknet` only in Stage 2 (`delegated_staking_request`).
+If the owner wallet is known, pass it as `--requester`; the binary sends
+it to KYA as `requester_address` so KYA can route the owner reward share
+without falling back to the agent EOA.
 The legacy deposit-address `worknet_id` path means "enter awaiting_match"
 and can trigger the fixed admission-threshold allocation instead of the
 owner's requested amount, so the binary deliberately omits worknet from
@@ -435,15 +439,15 @@ kya-agent open "kya-sign://reveal?api=https://kya.link&type=email_claim"
 | `kya-sign://email-claim?api=<base>&email=<addr>` | `claim-email --email <addr>` |
 | `kya-sign://agent-email-onboard?api=<base>` | `agent-email-onboard` (prompts for human-email + username + OTP). Writes `agent_email_claim` with `proof_strength=signup_only`. |
 | `kya-sign://agent-email-onboard?api=<base>&human_email=<addr>&username=<name>` | TTY: `agent-email-onboard --human-email <addr> --username <name>`. Non-TTY: `agent-email-onboard --human-email <addr> --username <name> --prepare-only`, then run the returned `_internal.next_command` with the OTP. |
-| `kya-sign://agent-email-existing-org?api=<base>` | `agent-email-existing-org` (prompts for existing AgentMail org API key + username + inbox OTP). Creates a new inbox under the existing organization and writes `agent_email_claim` with `proof_strength=inbox_control`. |
-| `kya-sign://agent-email-existing-org?api=<base>&username=<name>` | `agent-email-existing-org --username <name>`; pass `--agentmail-api-key` or set `AGENTMAIL_API_KEY`. Non-TTY can use `--prepare-only`, then run the returned `_internal.next_command` with the OTP. |
-| `kya-sign://agent-email-inbox-otp?api=<base>` | `agent-email-inbox-otp` (prompts for inbox + code). Upserts `agent_email_claim` to `proof_strength=inbox_control`. |
-| `kya-sign://agent-email-inbox-otp?api=<base>&inbox=<addr>@agentmail.to` | `agent-email-inbox-otp --inbox-email <addr>` (`inbox_email` is also accepted) |
+| `kya-sign://agent-email-existing-org?api=<base>` | Advanced recovery only: `agent-email-existing-org` prompts for an existing AgentMail org API key + username + inbox OTP. Use only when the user must create a new inbox under an existing org. |
+| `kya-sign://agent-email-existing-org?api=<base>&username=<name>` | Advanced recovery only: `agent-email-existing-org --username <name>`; pass `--agentmail-api-key` or set `AGENTMAIL_API_KEY`. Non-TTY can use `--prepare-only`, then run the returned `_internal.next_command` with the OTP. |
+| `kya-sign://agent-email-inbox-otp?api=<base>` | `agent-email-inbox-otp` (prompts for inbox + OTP). Upserts `agent_email_claim` to `proof_strength=inbox_control`. Do not ask the user for an AgentMail API key. |
+| `kya-sign://agent-email-inbox-otp?api=<base>&inbox=<addr>@agentmail.to` | `agent-email-inbox-otp --inbox-email <addr>` (`inbox_email` is also accepted). Non-TTY returns `_internal.next_command`; run that exact command with the OTP. If entering the code manually, include `--code <OTP>` on the confirm run so it confirms the existing challenge instead of preparing a new OTP. |
 | `kya-sign://kyc?api=<base>&owner=0x...` | `kyc --owner 0x...` |
 | `kya-sign://reveal?api=<base>` | `reveal` (all types) |
 | `kya-sign://reveal?api=<base>&type=<t>` | `reveal --type <t>` |
 | `kya-sign://set-recipient?api=<base>` | `set-recipient` (stage 1 only — point recipient at KYA deposit) |
-| `kya-sign://set-recipient?api=<base>&worknet_id=<id>&amount=<awp>` | `set-recipient --worknet <id> --amount <awp>` (full delegated-staking) |
+| `kya-sign://set-recipient?api=<base>&worknet_id=<id>&amount=<awp>&requester=0x...` | `set-recipient --worknet <id> --amount <awp> --requester 0x...` (full delegated-staking; `requester_address` and `owner` aliases are also accepted) |
 | `kya-sign://set-recipient?api=<base>&worknet=<id>&amount=<awp>` | same as above; legacy alias for `worknet_id` |
 | `kya-sign://grant-delegate` | `grant-delegate` |
 | `kya-sign://sign?clip=1` | `sign --from-clipboard` |
@@ -464,8 +468,8 @@ dispatched command before it runs.
 | `claim-telegram` | Same shape as `claim-twitter`, public-channel only. |
 | `claim-email` | Bind an email. Two signs sandwich a 6-digit code. TTY prompts; piped requires `--email --code`. |
 | `agent-email-onboard` | Create a new `*@agentmail.to` inbox through KYA's AgentMail proxy. Two signs sandwich the AgentMail OTP. TTY prompts; piped can either pass `--human-email --username --code` or use `--prepare-only` followed by `--state <file> --code <OTP>`. After confirm, the AgentMail inbox key is saved locally and the output strongly warns the owner to keep that file for future `inbox_control` upgrades. |
-| `agent-email-existing-org` | Existing AgentMail organization path. Uses an org API key once to create a new inbox + inbox-scoped key, sends a KYA OTP to the new inbox, then confirms `proof_strength=inbox_control`. |
-| `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. It first tries to auto-read the OTP with a saved key file or `AGENTMAIL_API_KEY`; `--code` remains the manual fallback. |
+| `agent-email-existing-org` | Advanced recovery path. Uses an org API key once to create a new inbox + inbox-scoped key, sends a KYA OTP to the new inbox, then confirms `proof_strength=inbox_control`. Do not use it for the normal web `agent-email-inbox-otp` magic link. |
+| `agent-email-inbox-otp` | Prove control of an existing `*@agentmail.to` inbox. Two signs sandwich a KYA OTP. Default TTY flow: KYA sends the OTP, the user reads the AgentMail inbox, and pastes it at the prompt. Non-TTY flow: first run `--prepare-only` or the magic link command, then run the returned `--state <file> --code <OTP>` command. Supplying `--code` confirms an existing challenge without preparing a new OTP. Optional local-only auto-read requires `--auto-read` plus saved credentials; never ask the user for an API key just to finish the web flow. |
 | `kyc` | Sign `KycInit`, create a Didit session, return verification URL, optionally poll until terminal. |
 | `reveal` | Off-chain. Sign `Action(attestation_reveal)`, get unredacted metadata. `--type email_claim/kyc/twitter_claim/telegram_claim/staking`. |
 | `set-recipient` | Stage 1: gasless `AWPRegistry.setRecipient` via relayer. Stage 2 (with `--amount`): KYA `delegated_staking_request`. Pre-checks X/Twitter attestation. |
@@ -488,12 +492,12 @@ streams progress on stderr as NDJSON `step` / `info` lines.
 | `AGENT_MISMATCH` | `awp-wallet wallets`, find the right profile, `export AWP_AGENT_ID=<id>` (or pass `--agent-id`), retry. |
 | `TIMESTAMP_OUT_OF_RANGE` / `INVALID_SIGNATURE` | Local clock drift. `sudo sntp -sS time.apple.com` (macOS) / `w32tm /resync` (Windows) / `chronyc makestep` (Linux). Retry. |
 | `EMAIL_INVALID` | Ask the user for a syntactically valid email and re-run. |
-| `EMAIL_CODE_INVALID` | Re-read the inbox and re-run `kya-agent claim-email --email <addr> --code <CODE>`. |
+| `EMAIL_CODE_INVALID` | For human email, re-read the inbox and re-run `kya-agent claim-email --email <addr> --code <CODE>`. For `agent-email-inbox-otp`, do not start a fresh prepare unless you need a new OTP; use the returned `--state <file> --code <OTP>` command with the latest code from the same prepared run. |
 | `EMAIL_MAX_ATTEMPTS` | 5 wrong codes — restart with a fresh `kya-agent claim-email`. |
 | `EMAIL_RESEND_COOLDOWN` | Wait ~60 s and retry. |
 | `AGENT_EMAIL_FEATURE_OFF` | Agent-email is disabled on this deployment. Surface verbatim; do not retry. |
-| `AGENTMAIL_ORGANIZATION_EXISTS` | The human email already has an AgentMail organization. Use `agent-email-existing-org --username <name> --agentmail-api-key <key>` to create another inbox under that organization. |
-| `AGENTMAIL_API_KEY_INVALID` | Ask the user for a valid AgentMail organization API key from the AgentMail console, then retry `agent-email-existing-org`. |
+| `AGENTMAIL_ORGANIZATION_EXISTS` | The human email already has an AgentMail organization. First ask whether the target `*@agentmail.to` inbox already exists; if yes, run `agent-email-inbox-otp --inbox-email <addr>` and ask the user to paste the OTP from that inbox. Use `agent-email-existing-org --username <name> --agentmail-api-key <key>` only if they explicitly need to create a new inbox under the existing organization and have the org key. |
+| `AGENTMAIL_API_KEY_INVALID` | Only applies to the advanced `agent-email-existing-org` recovery path. Ask for a valid AgentMail organization API key from the AgentMail console, or fall back to `agent-email-inbox-otp` if the inbox already exists. |
 | `AGENTMAIL_SIGNUP_DEDUP` | That human email recently created or attempted an AgentMail inbox for another agent. Use `agent-email-inbox-otp` if the inbox already exists. |
 | `AGENTMAIL_SIGNUP_INVALID_USERNAME` | Pick a 3-32 char lowercase `[a-z0-9-]` username that does not start or end with `-`. |
 | `AGENTMAIL_PROVIDER_UNAVAILABLE` | AgentMail provider is unavailable. Surface verbatim and retry later. |
@@ -529,18 +533,24 @@ outcome.
 - **Do not lose the AgentMail inbox key.** `agent-email-onboard` creates a
   local key file after confirm (override directory with
   `KYA_AGENTMAIL_KEY_DIR`). Do not print, paste, or commit the key. Without
-  that key, the agent cannot read future OTPs sent to its `*@agentmail.to`
-  inbox and cannot automate `agent-email-inbox-otp`.
-- **AgentMail auto-read is local-only.** `agent-email-inbox-otp` calls
+  that key, the agent cannot automatically read future OTPs sent to its
+  `*@agentmail.to` inbox. Manual OTP entry still works.
+- **AgentMail auto-read is opt-in and local-only.** By default,
+  `agent-email-inbox-otp` asks the user to open the AgentMail inbox and paste
+  the 6-digit code. With `--auto-read`, it calls
   AgentMail's HTTP API directly (`/v0/inboxes/{inbox_id}/messages`) using
   the saved key file, `--key-file`, or `AGENTMAIL_API_KEY` plus optional
-  `AGENTMAIL_INBOX_ID`. If no credentials are available it stops in
-  non-interactive mode and asks for `--code`.
+  `AGENTMAIL_INBOX_ID`. Do not ask the user for an API key unless they
+  explicitly requested auto-read or advanced existing-org recovery.
 - **`set-recipient --amount` requires `--worknet`.** The binary omits
   worknet only from the Stage 1 deposit-address lookup; it still sends the
   explicit WorkNet id in Stage 2 (`delegated_staking_request`). If the
   magic link lacks `worknet_id`, stop and ask the owner to choose the
   target WorkNet in KYA web.
+- **Pass `--requester` when the owner wallet is known.** KYA accepts this
+  as `requester_address` on the delegated-staking request and uses it for
+  owner reward routing. Omitting it keeps legacy behavior and lets KYA
+  fall back to its server-side owner/agent resolution chain.
 - **Telegram claim is public-channel only** (`t.me/<channel>/<msg_id>`).
   KYA fetches the public web preview; private DMs and unlisted groups
   cannot be verified.

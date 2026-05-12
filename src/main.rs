@@ -65,7 +65,7 @@ enum Command {
     ClaimEmail(cmd::claim_email::Args),
     /// Agent-email onboard (left card) — KYA proxies agentmail signUp + verify. Writes agent_email_claim with proof_strength=signup_only.
     AgentEmailOnboard(cmd::agent_email_onboard::Args),
-    /// Agent-email existing organization — create a new inbox with an AgentMail API key, then prove inbox control.
+    /// Agent-email existing organization — advanced recovery: create a new inbox with an AgentMail API key, then prove inbox control.
     AgentEmailExistingOrg(cmd::agent_email_existing_org::Args),
     /// Agent-email inbox-OTP (right card) — prove inbox control. Upgrades or creates agent_email_claim with proof_strength=inbox_control.
     AgentEmailInboxOtp(cmd::agent_email_inbox_otp::Args),
