@@ -58,10 +58,16 @@ pub fn run(ctx: &Ctx, args: Args) -> Result<()> {
 
     let (sig2, ts2, n2) = sign_action(ctx, "telegram_claim", &agent)?;
     let ts2_str = ts2.to_string();
+    // 与 claim_twitter 同一落地页 `/verify/social/claim`，靠 fragment 里
+    // `platform=telegram` 切到 Telegram tab。
+    // 兼容性：web 侧还保留了一个 `/verify/social/telegram` 的 client-side
+    // redirect 兜底（透传 fragment + 强制 platform=telegram），用于之前
+    // 已经签发但还没用完的旧版 handoff URL，本仓库版本不再生成该 path。
     let url = build_handoff_url(
         &ctx.web_base,
-        "/verify/social/telegram",
+        "/verify/social/claim",
         &[
+            ("platform", "telegram"),
             ("agent", &agent),
             ("nonce", &claim_nonce),
             ("claim_text", &claim_text),
